@@ -3,7 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Configuration/langues.dart';
 import '../Configuration/matieres.dart';
+import '../Services/api_exception.dart';
 import '../Services/auth_storage.dart';
+import '../Services/mobile_auth_api.dart';
 
 /// État de session côté app (langue, progression, forfait).
 /// À brancher sur l'API : les valeurs sont initialisées en local pour la démo.
@@ -117,6 +119,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deconnecter() async {
+    // Essayer de prévenir le backend avant de couper localement. Si le
+    // réseau est indispo (ou si le token est déjà périmé), on ignore et
+    // on nettoie quand même — l'utilisateur ne doit jamais rester coincé
+    // en "deconnexion".
+    if (_accessToken != null) {
+      try {
+        await MobileAuthApi().logout();
+      } on ApiException {
+        // best-effort — on continue le nettoyage local.
+      }
+    }
     _connecte = false;
     _accessToken = null;
     notifyListeners();
@@ -135,6 +148,25 @@ class AppState extends ChangeNotifier {
     await AuthStorage.enregistrer(accessToken: accessToken, refreshToken: refreshToken);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_cleConnecte, true);
+  }
+
+  /// Tente de renouveler l'access token à partir du refresh token persisté.
+  /// Branché sur [ApiClient.rafraichirSession] dans `main.dart`.
+  /// Retourne `true` si un nouveau token est en place, `false` sinon
+  /// (l'appelant doit alors déclencher la déconnexion).
+  Future<bool> tenterRafraichirSession() async {
+    final refresh = await AuthStorage.refreshToken();
+    if (refresh == null || refresh.isEmpty) return false;
+    try {
+      final session = await MobileAuthApi().refresh(refresh);
+      await definirSession(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+      return true;
+    } on ApiException {
+      return false;
+    }
   }
 
   /// Met à jour le catalogue de features exposé par le backend.

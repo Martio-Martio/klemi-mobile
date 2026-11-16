@@ -14,9 +14,14 @@ void main() {
   configLoading();
 
   // AppState est injecté plus bas dans le Provider ; on en crée l'instance
-  // ici pour pouvoir brancher l'ApiClient (langue + token) avant toute requête.
+  // ici pour pouvoir brancher l'ApiClient (langue + token + refresh) avant
+  // toute requête.
   final etat = AppState();
-  ApiClient.brancher(ApiClient(resoudreLangue: () => etat.langue.id));
+  final apiClient = ApiClient(
+    resoudreLangue: () => etat.langue.id,
+    rafraichirSession: etat.tenterRafraichirSession,
+  );
+  ApiClient.brancher(apiClient);
 
   // Application en portrait uniquement
   SystemChrome.setPreferredOrientations([

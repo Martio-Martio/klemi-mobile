@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import '../../Configuration/app_theme.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/mobile_auth_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import 'code_page.dart';
 import 'inscription_page.dart';
@@ -8,7 +11,8 @@ import 'langue_page.dart';
 
 /// 1.2 · Connexion — numéro + code WhatsApp (défaut) ou e‑mail + mot de passe.
 class ConnexionPage extends StatefulWidget {
-  const ConnexionPage({super.key});
+  final MobileAuthApi? api; // injectable pour les tests
+  const ConnexionPage({super.key, this.api});
 
   @override
   State<ConnexionPage> createState() => _ConnexionPageState();
@@ -17,11 +21,64 @@ class ConnexionPage extends StatefulWidget {
 class _ConnexionPageState extends State<ConnexionPage> {
   int _mode = 0; // 0 numéro, 1 e‑mail
   final _telephone = TextEditingController();
+  bool _enCours = false;
+
+  late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
 
   @override
   void dispose() {
     _telephone.dispose();
     super.dispose();
+  }
+
+  Future<void> _demarrerLoginWhatsapp() async {
+    if (_enCours) return;
+    if (_telephone.text.trim().isEmpty) {
+      _afficherErreur('Entre ton numéro WhatsApp.');
+      return;
+    }
+    setState(() => _enCours = true);
+    EasyLoading.show(status: 'Envoi du code…');
+    try {
+      final demarrage = await _api.login(_telephone.text);
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      Navigator.of(context).push(routeGlissante(
+        CodePage(numero: _telephone.text, tempToken: demarrage.tempToken),
+      ));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      if (e.statusCode == 404 || e.code == 'USER_NOT_FOUND') {
+        _proposerInscription();
+      } else {
+        _afficherErreur(e.message);
+      }
+    } finally {
+      if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  void _proposerInscription() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Ce numéro n\'est pas encore inscrit sur Klemi.'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'S\'inscrire',
+          onPressed: () => Navigator.of(context).pushReplacement(
+            routeGlissante(const InscriptionPage()),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _afficherErreur(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
@@ -65,9 +122,7 @@ class _ConnexionPageState extends State<ConnexionPage> {
                   icone: Icons.chat_bubble_outline,
                   iconeADroite: false,
                   couleur: AppTheme.whatsapp,
-                  onPressed: () => Navigator.of(context).push(
-                    routeGlissante(CodePage(numero: _telephone.text)),
-                  ),
+                  onPressed: _enCours ? null : _demarrerLoginWhatsapp,
                 ),
                 TextButton(
                   onPressed: () {},

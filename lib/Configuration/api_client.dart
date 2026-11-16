@@ -16,21 +16,42 @@ typedef ResolveurLangue = String Function();
 /// connecté (endpoints publics, ping health, platform/features…).
 typedef ResolveurToken = Future<String?> Function();
 
+/// Rafraîchit le token quand une requête retourne 401. Doit renvoyer `true`
+/// si un nouveau token est en place (la requête originale sera rejouée),
+/// `false` si l'utilisateur doit se reconnecter. Injecté depuis main.dart
+/// pour éviter la cyclique `ApiClient → MobileAuthApi → ApiClient`.
+typedef RafraichirSession = Future<bool> Function();
+
 /// Client HTTP unique de l'app. Injecte systématiquement :
 ///   - `Authorization: Bearer <token>` quand un token existe.
 ///   - `x-device-id`, `x-device-name`, `x-platform`, `x-language`.
 ///   - `Content-Type: application/json` (sauf multipart).
 /// Décode la réponse, lève [ApiException] sur statut >= 400.
+/// Si [rafraichirSession] est branché, un 401 déclenche un refresh + retry
+/// unique avant de propager l'erreur.
 class ApiClient {
   final String baseUrl;
   final ResolveurLangue resoudreLangue;
   final ResolveurToken resoudreToken;
+  RafraichirSession? rafraichirSession;
   final http.Client _client;
+
+  /// Chemins qui ne doivent jamais déclencher le refresh : les endpoints d'auth
+  /// retournent 401 dans des conditions normales (code OTP erroné, token
+  /// expiré, etc.) — refresh ici tournerait en boucle.
+  static const _cheminsSansRefresh = {
+    '/mobile-auth/login',
+    '/mobile-auth/signup',
+    '/mobile-auth/verify-otp',
+    '/mobile-auth/resend-otp',
+    '/mobile-auth/refresh',
+  };
 
   ApiClient({
     String? baseUrl,
     required this.resoudreLangue,
     ResolveurToken? resoudreToken,
+    this.rafraichirSession,
     http.Client? client,
   })  : baseUrl = baseUrl ?? ApiUrl.baseUrl,
         resoudreToken = resoudreToken ?? AuthStorage.accessToken,
@@ -79,11 +100,11 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
-    return _executer(() async => _client.get(_uri(path, query), headers: await _entetes()));
+    return _executer(path, () async => _client.get(_uri(path, query), headers: await _entetes()));
   }
 
   Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query}) async {
-    return _executer(() async => _client.post(
+    return _executer(path, () async => _client.post(
           _uri(path, query),
           headers: await _entetes(),
           body: body == null ? null : jsonEncode(body),
@@ -91,7 +112,7 @@ class ApiClient {
   }
 
   Future<dynamic> patch(String path, {Object? body}) async {
-    return _executer(() async => _client.patch(
+    return _executer(path, () async => _client.patch(
           _uri(path),
           headers: await _entetes(),
           body: body == null ? null : jsonEncode(body),
@@ -99,7 +120,7 @@ class ApiClient {
   }
 
   Future<dynamic> put(String path, {Object? body}) async {
-    return _executer(() async => _client.put(
+    return _executer(path, () async => _client.put(
           _uri(path),
           headers: await _entetes(),
           body: body == null ? null : jsonEncode(body),
@@ -107,7 +128,7 @@ class ApiClient {
   }
 
   Future<dynamic> delete(String path, {Object? body}) async {
-    return _executer(() async => _client.delete(
+    return _executer(path, () async => _client.delete(
           _uri(path),
           headers: await _entetes(),
           body: body == null ? null : jsonEncode(body),
@@ -121,18 +142,31 @@ class ApiClient {
     required Map<String, String> champs,
     required List<http.MultipartFile> fichiers,
   }) async {
-    final requete = http.MultipartRequest('POST', _uri(path));
-    requete.headers.addAll(await _entetes(jsonBody: false));
-    requete.fields.addAll(champs);
-    requete.files.addAll(fichiers);
-    final reponseStream = await _client.send(requete);
-    final reponse = await http.Response.fromStream(reponseStream);
-    return _decoder(reponse);
+    Future<http.Response> envoyer() async {
+      final requete = http.MultipartRequest('POST', _uri(path));
+      requete.headers.addAll(await _entetes(jsonBody: false));
+      requete.fields.addAll(champs);
+      requete.files.addAll(fichiers);
+      final reponseStream = await _client.send(requete);
+      return http.Response.fromStream(reponseStream);
+    }
+
+    return _executer(path, envoyer);
   }
 
-  Future<dynamic> _executer(Future<http.Response> Function() action) async {
+  /// Exécute une requête HTTP avec gestion réseau et retry sur 401.
+  /// Le retry n'est déclenché qu'une seule fois par appel pour éviter les
+  /// boucles infinies, et jamais sur les chemins listés dans
+  /// [_cheminsSansRefresh].
+  Future<dynamic> _executer(String path, Future<http.Response> Function() action) async {
     try {
-      final reponse = await action();
+      var reponse = await action();
+      if (reponse.statusCode == 401 &&
+          rafraichirSession != null &&
+          !_cheminsSansRefresh.contains(path)) {
+        final ok = await rafraichirSession!();
+        if (ok) reponse = await action();
+      }
       return _decoder(reponse);
     } on http.ClientException catch (e) {
       throw ApiException(statusCode: 0, message: 'Problème réseau : ${e.message}');

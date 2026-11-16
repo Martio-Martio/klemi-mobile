@@ -16,7 +16,7 @@ void main() {
     test('injecte x-language, x-device-id, x-platform, Authorization sur GET', () async {
       late http.Request requeteCapturee;
       final mock = MockClient((req) async {
-        requeteCapturee = req as http.Request;
+        requeteCapturee = req;
         return http.Response('{"ok":true}', 200);
       });
 
@@ -40,7 +40,7 @@ void main() {
     test('n\'injecte pas Authorization quand le token est null', () async {
       late http.Request requeteCapturee;
       final mock = MockClient((req) async {
-        requeteCapturee = req as http.Request;
+        requeteCapturee = req;
         return http.Response('{}', 200);
       });
 
@@ -108,7 +108,7 @@ void main() {
     test('ajoute les query params en encodant correctement', () async {
       late http.Request requeteCapturee;
       final mock = MockClient((req) async {
-        requeteCapturee = req as http.Request;
+        requeteCapturee = req;
         return http.Response('{}', 200);
       });
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
 import '../../Configuration/matieres.dart';
 import '../../Providers/app_state.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/mobile_auth_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../../Widgets/matieres_widgets.dart';
 import 'code_page.dart';
@@ -12,7 +15,8 @@ import 'connexion_page.dart';
 
 /// 1.1 · Inscription — rôle, nom, numéro WhatsApp, classe/établissement.
 class InscriptionPage extends StatefulWidget {
-  const InscriptionPage({super.key});
+  final MobileAuthApi? api; // injectable pour les tests
+  const InscriptionPage({super.key, this.api});
 
   @override
   State<InscriptionPage> createState() => _InscriptionPageState();
@@ -25,20 +29,63 @@ class _InscriptionPageState extends State<InscriptionPage> {
   final _nom = TextEditingController();
   final _telephone = TextEditingController();
   final _classe = TextEditingController();
+  final _etablissement = TextEditingController();
+  bool _enCours = false;
+
+  late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
 
   @override
   void dispose() {
     _nom.dispose();
     _telephone.dispose();
     _classe.dispose();
+    _etablissement.dispose();
     super.dispose();
   }
 
-  void _valider() {
+  Future<void> _valider() async {
+    if (_enCours) return;
     final etat = context.read<AppState>();
-    etat.choisirNiveau(_niveau);
-    if (_classe.text.trim().isNotEmpty) etat.classe = _classe.text.trim();
-    Navigator.of(context).push(routeGlissante(CodePage(numero: _telephone.text)));
+    // Pré-requis minimaux côté client — l'API validera à nouveau.
+    if (_telephone.text.trim().isEmpty || _nom.text.trim().isEmpty) {
+      _afficherErreur('Renseigne ton nom et ton numéro WhatsApp.');
+      return;
+    }
+
+    setState(() => _enCours = true);
+    EasyLoading.show(status: 'Création du compte…');
+    try {
+      final demarrage = await _api.signup(
+        phone: _telephone.text,
+        role: _role == 0 ? RoleInscription.eleve : RoleInscription.enseignant,
+        nom: _nom.text,
+        niveauEtudes: _niveau,
+        classe: _classe.text,
+        etablissement: _role == 1 ? _etablissement.text : null,
+        langue: etat.langue.id,
+      );
+      // Pré-remplir ce qui peut l'être avant la vérification OTP ; tout
+      // sera refetch depuis /mobile/me après connexion effective.
+      await etat.choisirNiveau(_niveau);
+      if (_classe.text.trim().isNotEmpty) etat.classe = _classe.text.trim();
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      Navigator.of(context).push(routeGlissante(
+        CodePage(numero: _telephone.text, tempToken: demarrage.tempToken),
+      ));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _afficherErreur(e.message);
+    } finally {
+      if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  void _afficherErreur(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
@@ -103,9 +150,10 @@ class _InscriptionPageState extends State<InscriptionPage> {
                   style: TextStyle(fontSize: 12, color: AppTheme.texteDiscret),
                 ),
               ] else
-                const KlemiChamp(
+                KlemiChamp(
                   etiquette: 'Établissement (facultatif)',
                   indice: 'Lycée Askia, Bamako',
+                  controleur: _etablissement,
                 ),
               const SizedBox(height: 16),
               InkWell(

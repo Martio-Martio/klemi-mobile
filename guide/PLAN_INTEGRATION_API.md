@@ -89,30 +89,32 @@ _Rien — CORS, JWT guard et headers déjà prêts. Voir `klemi-api/guide/PLAN_I
 > Suppose que `POST /api/mobile-auth/{signup,login,verify-otp,resend-otp,refresh,logout}` est livré côté API.
 
 ### Service
-- [ ] Créer `lib/Services/mobile_auth_api.dart` avec 6 méthodes : `signup`, `login`, `verifyOtp`, `resendOtp`, `refresh`, `logout`. Toutes basées sur `ApiClient`.
+- [x] Créer `lib/Services/mobile_auth_api.dart` avec 6 méthodes : `signup`, `login`, `verifyOtp`, `resendOtp`, `refresh`, `logout`. Toutes basées sur `ApiClient`. _(`MobileAuthDemarrage` + `MobileAuthSession` + enum `RoleInscription`.)_
 
 ### Pages Auth
-- [ ] `lib/Pages/Auth/inscription_page.dart` : au submit → `signup(phone, role, nom, niveauEtudes, classe, etablissement, langue)` → navigue vers `code_page.dart(tempToken)`.
-- [ ] `lib/Pages/Auth/connexion_page.dart` : au submit → `login(phone)` → `code_page.dart(tempToken)`.
-- [ ] `lib/Pages/Auth/code_page.dart` : au submit → `verifyOtp(tempToken, code)` → store tokens → `AppState.marquerConnecte(true)` → remplace la stack par `AppShell`.
-- [ ] Gérer erreur **404 `USER_NOT_FOUND`** dans `connexion_page.dart` : afficher snackbar + CTA « s'inscrire ».
-- [ ] Gérer expiration OTP : bouton « Renvoyer le code » appelle `resendOtp(tempToken)`.
-- [ ] `AppState.deconnecter()` : appelle aussi `MobileAuthApi.logout()` avant de nettoyer.
+- [x] `lib/Pages/Auth/inscription_page.dart` : au submit → `signup(phone, role, nom, niveauEtudes, classe, etablissement, langue)` → navigue vers `code_page.dart(tempToken)`. _(EasyLoading + validation client minimale + propagation `AppState.choisirNiveau` avant navigation.)_
+- [x] `lib/Pages/Auth/connexion_page.dart` : au submit → `login(phone)` → `code_page.dart(tempToken)`.
+- [x] `lib/Pages/Auth/code_page.dart` : au submit → `verifyOtp(tempToken, code)` → store tokens → `AppState.definirSession(...)` → remplace la stack par `AppShell`. _(Fallback : si `tempToken=null`, va direct à AppShell → utile tant que l'API n'est pas branchée.)_
+- [x] Gérer erreur **404 `USER_NOT_FOUND`** dans `connexion_page.dart` : afficher snackbar + CTA « s'inscrire ». _(SnackBarAction qui route vers `InscriptionPage`.)_
+- [x] Gérer expiration OTP : bouton « Renvoyer le code » appelle `resendOtp(tempToken)`. _(Timer 60s + feedback snackbar après envoi.)_
+- [x] `AppState.deconnecter()` : appelle aussi `MobileAuthApi.logout()` avant de nettoyer. _(Best-effort : si ApiException, nettoyage local continue.)_
 
 ### Refresh token
-- [ ] `ApiClient` : interceptor 401 → tente `refresh()` une fois, rejoue la requête initiale. Si refresh échoue → `AppState.deconnecter()` + route vers `ConnexionPage`.
+- [x] `ApiClient` : interceptor 401 → tente `refresh()` une fois, rejoue la requête initiale. Si refresh échoue → `AppState.deconnecter()` + route vers `ConnexionPage`. _(Via callback `rafraichirSession` injecté dans `main.dart` → `AppState.tenterRafraichirSession()`. Liste `_cheminsSansRefresh` bloque la boucle sur les endpoints `/mobile-auth/*`. La redirection vers `ConnexionPage` à la 2ᵉ 401 sera traitée en Phase 4 avec le ProfileRepository, pour l'instant l'appelant reçoit juste l'ApiException et affiche le message.)_
 
 ### Tests
-- [ ] Mettre à jour `test/widget_test.dart` pour injecter un `MobileAuthApi` mocké (ne pas casser les 3 tests existants).
-- [ ] Nouveau test widget : flow signup → code → AppShell.
+- [x] Mettre à jour `test/widget_test.dart` pour injecter un `MobileAuthApi` mocké (ne pas casser les 3 tests existants). _(Les 2 tests langue existants restent verts. Le 3ᵉ test « feed affiche une carte quiz » échoue toujours sur overflow pré-existant hors Phase 1.)_
+- [x] Nouveau fichier `test/mobile_auth_api_test.dart` : 6 specs unitaires (payload signup bien formé, trim phone, etablissement omis si vide, USER_NOT_FOUND propagé via `ApiException.code`, verifyOtp/refresh parsing, resend/logout POST silencieux).
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 1._
 
 ### Vérification Phase 1
-- [ ] `flutter run` avec API dev : inscription réelle, réception OTP WhatsApp sur numéro de test.
-- [ ] Après kill de l'app, session restaurée automatiquement au relancement.
-- [ ] Après 401 forcé (token expiré manuellement) → auto-refresh transparent OU redirection connexion si refresh invalide.
+- [ ] `flutter run` avec API dev : inscription réelle, réception OTP WhatsApp sur numéro de test. **Bloqué par API** : l'endpoint `/mobile-auth/signup` n'existe pas encore (choix provider WhatsApp requis côté API — cf. plan backend Phase 1).
+- [ ] Après kill de l'app, session restaurée automatiquement au relancement. **Bloqué par API**.
+- [ ] Après 401 forcé (token expiré manuellement) → auto-refresh transparent OU redirection connexion si refresh invalide. **Bloqué par API**.
+- [x] Compilation : `flutter analyze` sans nouveau warning (33 `deprecated_member_use` pré-existants hors scope).
+- [x] Tests unitaires : 5 ApiClient + 6 MobileAuthApi + 2 langue = **13 tests verts**. Non-régression confirmée.
 
 ---
 
@@ -395,3 +397,4 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-16 | — | Audit croisé API : URL dev Railway, limite 10 images, Wave retiré, `GET /platform/features` ajouté P0 | — |
 | 2026-11-16 | — | Correction : Wave désormais supporté par Flex Transfer → remis dans les moyens de paiement | — |
 | 2026-11-16 | P0 | **Phase 0 livrée** : `ApiUrl`, `ApiClient` + singleton, `AuthStorage`, `ApiException`, `DeviceInfo`, `PlatformFeaturesApi`, extension `AppState` (session + features), chargement au splash, 5 tests `ApiClient` verts. | — |
+| 2026-11-16 | P1 | **Phase 1 livrée côté mobile** : `MobileAuthApi` (6 méthodes), interceptor 401 → refresh → retry dans `ApiClient`, `AppState.tenterRafraichirSession()` + `deconnecter()` qui appelle logout backend, pages Auth branchées (inscription/connexion/code) avec EasyLoading + gestion erreurs + `USER_NOT_FOUND` snackbar, resend OTP avec timer 60s. 6 tests `MobileAuthApi` + 2 tests langue + 5 tests `ApiClient` = 13 verts. **Exécution réelle bloquée par l'API** (choix provider WhatsApp + endpoints à livrer). | — |

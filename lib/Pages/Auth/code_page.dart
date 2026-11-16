@@ -1,15 +1,22 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
+import '../../Pages/app_shell.dart';
+import '../../Providers/app_state.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/mobile_auth_api.dart';
 import '../../Widgets/klemi_widgets.dart';
-import 'langue_page.dart';
 
 /// 1.3 · Saisie du code WhatsApp (6 chiffres) avec clavier intégré.
 class CodePage extends StatefulWidget {
   final String numero;
-  const CodePage({super.key, this.numero = ''});
+  final String? tempToken;
+  final MobileAuthApi? api; // injectable pour les tests
+  const CodePage({super.key, this.numero = '', this.tempToken, this.api});
 
   @override
   State<CodePage> createState() => _CodePageState();
@@ -17,12 +24,21 @@ class CodePage extends StatefulWidget {
 
 class _CodePageState extends State<CodePage> {
   String _code = '';
-  int _secondes = 42;
+  int _secondes = 60;
   Timer? _timer;
+  bool _enCours = false;
+
+  late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
 
   @override
   void initState() {
     super.initState();
+    _demarrerTimer();
+  }
+
+  void _demarrerTimer() {
+    _timer?.cancel();
+    setState(() => _secondes = 60);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_secondes == 0) {
         t.cancel();
@@ -39,11 +55,79 @@ class _CodePageState extends State<CodePage> {
   }
 
   void _taper(String d) {
+    if (_enCours) return;
     if (_code.length < 6) setState(() => _code += d);
   }
 
   void _effacer() {
+    if (_enCours) return;
     if (_code.isNotEmpty) setState(() => _code = _code.substring(0, _code.length - 1));
+  }
+
+  Future<void> _valider() async {
+    if (_enCours) return;
+    final tempToken = widget.tempToken;
+    if (tempToken == null) {
+      // Flow test / démo : pas de tempToken → on garde l'ancien comportement
+      // qui emmenait directement vers AppShell. Utile tant que l'API n'est
+      // pas disponible.
+      _vers(const AppShell());
+      return;
+    }
+    final etat = context.read<AppState>();
+    setState(() => _enCours = true);
+    EasyLoading.show(status: 'Vérification…');
+    try {
+      final session = await _api.verifyOtp(tempToken: tempToken, code: _code);
+      await etat.definirSession(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _vers(const AppShell());
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _afficherErreur(e.message);
+      setState(() {
+        _enCours = false;
+        _code = '';
+      });
+    }
+  }
+
+  Future<void> _renvoyer() async {
+    if (_secondes > 0 || _enCours) return;
+    final tempToken = widget.tempToken;
+    if (tempToken == null) return;
+    EasyLoading.show(status: 'Envoi d\'un nouveau code…');
+    try {
+      await _api.resendOtp(tempToken);
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nouveau code envoyé.'), behavior: SnackBarBehavior.floating),
+      );
+      _demarrerTimer();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _afficherErreur(e.message);
+    }
+  }
+
+  void _afficherErreur(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  void _vers(Widget destination) {
+    Navigator.of(context).pushAndRemoveUntil(
+      routeGlissante(destination),
+      (_) => false,
+    );
   }
 
   String get _numeroMasque {
@@ -134,34 +218,27 @@ class _CodePageState extends State<CodePage> {
               KlemiBouton(
                 libelle: 'Valider',
                 icone: Icons.arrow_forward,
-                onPressed: complet
-                    ? () => Navigator.of(context).pushAndRemoveUntil(
-                          routeGlissante(const LanguePage()),
-                          (_) => false,
-                        )
-                    : null,
+                onPressed: complet && !_enCours ? _valider : null,
               ),
               const SizedBox(height: 14),
-              Text.rich(
-                TextSpan(
-                  style: const TextStyle(fontSize: 13, color: AppTheme.texteSecondaire),
-                  children: [
-                    const TextSpan(text: 'Pas reçu ? '),
-                    TextSpan(
-                      text: _secondes > 0
-                          ? 'Renvoyer dans 0:${_secondes.toString().padLeft(2, '0')}'
-                          : 'Renvoyer le code',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: _secondes > 0 ? AppTheme.texteSecondaire : AppTheme.bleuFonce,
+              GestureDetector(
+                onTap: _renvoyer,
+                child: Text.rich(
+                  TextSpan(
+                    style: const TextStyle(fontSize: 13, color: AppTheme.texteSecondaire),
+                    children: [
+                      const TextSpan(text: 'Pas reçu ? '),
+                      TextSpan(
+                        text: _secondes > 0
+                            ? 'Renvoyer dans 0:${_secondes.toString().padLeft(2, '0')}'
+                            : 'Renvoyer le code',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: _secondes > 0 ? AppTheme.texteSecondaire : AppTheme.bleuFonce,
+                        ),
                       ),
-                    ),
-                    const TextSpan(text: ' · '),
-                    const TextSpan(
-                      text: 'Recevoir par SMS',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.bleuFonce),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const Spacer(),
