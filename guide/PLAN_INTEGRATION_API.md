@@ -58,8 +58,8 @@ En face, `klemi-api` est un backend NestJS mature en production (~200 endpoints)
 
 ### Dépendances & configuration
 - [ ] Ajouter à `pubspec.yaml` : `uuid: ^4.x`, `flutter_secure_storage: ^9.x`. Lancer `flutter pub get`.
-- [ ] Remplir `lib/Configuration/api_url.dart` : `class ApiUrl { static const baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://api2-dev.klemi.ci/api'); }`.
-- [ ] Documenter dans `README.md` : `flutter run --dart-define=API_BASE_URL=https://api.klemi.ci/api` pour cibler prod.
+- [ ] Remplir `lib/Configuration/api_url.dart` : `class ApiUrl { static const baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://teach-me-api-development.up.railway.app/api'); }`. **Nota** : `api2-dev.klemi.ci` est commenté dans `.env.railway.dev` — ne plus l'utiliser. L'URL de référence dev est celle de Railway.
+- [ ] Documenter dans `README.md` les 3 cibles : `--dart-define=API_BASE_URL=https://api.klemi.ci/api` (prod), Railway dev (défaut), `http://localhost:7501/api` (local avec `start:dev-safe`).
 
 ### Code transverse
 - [ ] Créer `lib/Configuration/api_client.dart` : wrapper `http` qui injecte automatiquement `Authorization: Bearer <token>`, `x-device-id`, `x-device-name`, `x-platform: ios|android`, `x-language: <langue.id>` (lue depuis `AppState.langue.id`). Un seul point d'entrée pour toutes les requêtes.
@@ -72,10 +72,15 @@ En face, `klemi-api` est un backend NestJS mature en production (~200 endpoints)
 ### Côté API
 _Rien — CORS, JWT guard et headers déjà prêts. Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 0._
 
+### Feature flags (gain gratuit)
+- [ ] Au startup après `AppState.charger()`, appeler `GET /api/platform/features` (endpoint public existant, confirmé par audit — `src/controllers/platform-features.controller.ts:36-45`). Stocker le résultat dans `AppState.features`.
+- [ ] Utiliser ce flag pour désactiver dans l'UI les fonctionnalités backend absentes (ex. si l'intégration YouTube est désactivée par flag, griser la carte source `youtube` dans `CreerPage`). Évite d'avoir à hardcoder « cette feature est disponible » côté mobile.
+
 ### Vérification Phase 0
 - [ ] `flutter analyze` : 0 warning.
 - [ ] `flutter test` : les 3 tests widgets existants passent toujours.
 - [ ] Bouton debug « Ping API » affiche la réponse de `GET /api/health`.
+- [ ] `GET /api/platform/features` chargé au startup et exposé via `AppState.features`.
 
 ---
 
@@ -157,6 +162,34 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 2._
 - [ ] **Chaque méthode injecte systématiquement `language: AppState.langue.id` dans le body/form** — ne jamais laisser ce champ optionnel côté client, même si l'API le tolère.
 - [ ] Polling via `GET /files/upload-status/:jobId` ou abonnement SSE `/api/notifications/stream` (préférer SSE si disponible).
 
+### Source « Photo du cours » — multi-sélection + prévisualisation (gap actuel)
+
+> **Constat** : aujourd'hui `creer_page.dart:95` déclare une carte source `photo` mais la zone de dépôt (`_fichierDepose`, lignes 101-152) est mutualisée et simule un unique PDF. Zéro vraie gestion image, zéro multi-sélection, zéro preview. Côté API, `POST /files/upload-multiple-images` et `POST /revision-images/upload` acceptent déjà plusieurs images — rien à changer côté backend.
+
+- [ ] Ajouter `image_picker: ^1.x` à `pubspec.yaml` (choisir `image_picker` pour avoir caméra + galerie natives ; pas `file_picker` seul qui gère moins bien iOS).
+- [ ] Nouveau widget réutilisable `lib/Widgets/klemi_zone_photos.dart` qui remplace `_fichierDepose` **quand `_source == 'photo'`** :
+  - État interne `List<XFile> _photos`.
+  - Boutons côte à côte : « Prendre une photo » (`ImagePicker().pickImage(source: ImageSource.camera)`) et « Importer » (`ImagePicker().pickMultiImage(maxWidth: 2048)`).
+  - Grille `GridView.builder` 3 colonnes de vignettes carrées (Image.file + `fit: BoxFit.cover`, `borderRadius: AppTheme.radiusCarte`). Aspect 1:1.
+  - Chaque vignette porte un badge d'ordre `1`, `2`, `3`… en overlay (coin haut-gauche) — l'ordre compte pour la cohérence pédagogique de la fiche/quiz générée.
+  - Croix de suppression en overlay (coin haut-droit) qui retire l'image de la liste.
+  - Dernière case de la grille = tuile « + » qui rouvre le picker (toggle caméra/galerie dans un `showModalBottomSheet`).
+  - Drag-to-reorder sur les vignettes (`ReorderableGridView` du package `reorderables` ou implémentation manuelle avec `LongPressDraggable`) — permet à l'utilisateur de recomposer l'ordre des pages du cours photographié.
+  - Compteur en bas : `N photo(s) · ~X,Y Mo` (calcul via `File(path).lengthSync()`).
+  - Validation : min 1, **max 10 photos** (limite backend `maxCount: 10` dans `FileFieldsInterceptor`, confirmée par audit). Au-delà, snackbar d'erreur avec message _« 10 photos maximum par génération »_.
+  - Chaque image > 10 Mo → compresser automatiquement avant envoi (package `flutter_image_compress`, résolution cible 2048px côté long).
+- [ ] Intégrer `KlemiZonePhotos` dans `creer_page.dart` : conditionnel sur `_source == 'photo'`, remplace la zone unique PDF.
+- [ ] Au submit avec source photo → `CreationApi.genererDepuisImages(List<XFile> photos, type, langue, options)` → appel `POST /api/files/upload-multiple-images` (si quiz) ou `POST /api/revision-images/upload` (si fiche) ou `POST /api/podcasts` avec source image (si podcast — vérifier le support côté API, sinon désactiver l'option photo pour podcast avec un message explicite).
+- [ ] Le corps multipart envoie les images en **ordre affiché par l'utilisateur** (l'ordre des vignettes = l'ordre pédagogique).
+- [ ] `language` **toujours** injecté dans le form-data (règle transversale).
+- [ ] Vignettes : feedback haptique léger (`HapticFeedback.selectionClick()`) au drag.
+- [ ] États vides et de chargement : avant que l'utilisateur n'ait sélectionné une photo, afficher un placeholder dashed-border identique au style existant (`AppTheme.bordurePointillee`) avec icône caméra + libellé « Ajoute des photos de ton cours ».
+
+### Permissions natives
+- [ ] iOS : ajouter dans `ios/Runner/Info.plist` les clés `NSCameraUsageDescription` et `NSPhotoLibraryUsageDescription` avec un libellé en français expliquant que les photos servent à générer des quiz/fiches.
+- [ ] Android : `android/app/src/main/AndroidManifest.xml` — `READ_MEDIA_IMAGES` (API 33+) et `READ_EXTERNAL_STORAGE` (API ≤ 32). La caméra est gérée en permission runtime par `image_picker`.
+- [ ] Gérer refus de permission : snackbar avec CTA « Ouvrir les réglages » (via `AppSettings.openAppSettings()` du package `app_settings` si on l'ajoute, sinon message statique).
+
 ### Pages Creer — avertissement utilisateur
 - [ ] **Bandeau d'information fixe en haut de `CreerPage`** : _« Ce {type} sera généré en {AppState.langue.nom}. »_ avec un lien discret _« changer »_ qui ouvre `LanguePage` (ou directement `ParametresPage` avec ancre sur « Langue des contenus »).
 - [ ] Le bandeau change dynamiquement si l'utilisateur change de langue sans quitter la page.
@@ -176,6 +209,10 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 2._
 - [ ] Switcher la langue en `bm` dans Paramètres puis créer un quiz depuis un PDF français → le quiz est en bamanankan avec les caractères spéciaux visibles (pas de carrés).
 - [ ] Switcher en `sus` puis créer un podcast → audio en soso.
 - [ ] Switcher en `fr` → comportement historique inchangé (clients web non affectés).
+- [ ] **Multi-images** : prendre 3 photos consécutives d'un cours au tableau → vignettes affichées en grille 3 colonnes, numérotées 1/2/3, réordonnables par drag, suppression unitaire possible. Submit → quiz généré qui respecte l'ordre pédagogique des photos.
+- [ ] Import de 5 images depuis la galerie en une seule action → toutes apparaissent instantanément dans la grille.
+- [ ] Image > 10 Mo → compression automatique, pas d'erreur.
+- [ ] Refus de permission caméra → message clair + CTA réglages.
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 3._
@@ -259,6 +296,8 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 5._
 ## Phase 6 — Forfaits & paiement mobile money
 
 > Suppose que `GET /api/mobile/plans`, `POST /api/mobile/subscription/checkout`, `GET /api/mobile/subscription/status/:invoiceId` sont livrés.
+>
+> **Audit (2026-11-16)** : côté API, l'intégration mobile money passe par **Flex Transfer**, qui couvre désormais **Orange Money, MTN MoMo, Moov Money et Wave**. Devise par défaut : XAF. Tarifs réels : STUDENT 2000, PREMIUM 5000.
 
 ### Service
 - [ ] Créer `lib/Services/billing_api.dart`.
@@ -266,6 +305,7 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 5._
 ### Pages
 - [ ] `lib/Pages/Profil/forfaits_page.dart` : remplacer la liste codée en dur par `GET /api/mobile/plans`.
 - [ ] `lib/Pages/Profil/paiement_page.dart` : au submit → `checkout` → écran de polling sur `/api/mobile/subscription/status/:invoiceId` (toutes les 3 s pendant max 2 min). À PAID → `ProfileRepository.refresh()` + toast succès + retour profil.
+- [ ] Moyens affichés : **Orange Money, MTN MoMo, Moov Money, Wave** (tous supportés par Flex Transfer). Payload du `checkout` : `moyen: 'orange'|'mtn'|'moov'|'wave'`.
 - [ ] Gérer erreurs : paiement refusé, timeout, numéro invalide.
 
 ### Côté API
@@ -325,7 +365,9 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 7 (ETag, rate limiting)
 | 2 | `lib/Repositories/feed_repository.dart` | Nouveau |
 | 2 | `lib/Pages/Feed/*.dart` | Étendre |
 | 3 | `lib/Services/creation_api.dart` | Nouveau |
-| 3 | `lib/Pages/Creer/creer_page.dart` | Étendre |
+| 3 | `lib/Widgets/klemi_zone_photos.dart` | Nouveau (multi-images + preview) |
+| 3 | `lib/Pages/Creer/creer_page.dart` | Étendre (bandeau langue + brancher zone photos) |
+| 3 | `ios/Runner/Info.plist`, `android/app/src/main/AndroidManifest.xml` | Permissions caméra + galerie |
 | 4 | `lib/Services/profile_api.dart`, `lib/Repositories/profile_repository.dart` | Nouveaux |
 | 4 | `lib/Pages/Profil/*.dart` | Étendre |
 | 5 | `lib/Services/social_api.dart` | Nouveau |
@@ -349,3 +391,6 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 |------|-------|--------|--------|
 | 2026-11-16 | — | Création initiale du plan mobile | — |
 | 2026-11-16 | — | Ajout exigence transversale « langue de génération » (Phase 0/2/3/4) | — |
+| 2026-11-16 | — | Ajout gap « multi-images + preview » dans Phase 3 (`KlemiZonePhotos`) | — |
+| 2026-11-16 | — | Audit croisé API : URL dev Railway, limite 10 images, Wave retiré, `GET /platform/features` ajouté P0 | — |
+| 2026-11-16 | — | Correction : Wave désormais supporté par Flex Transfer → remis dans les moyens de paiement | — |
