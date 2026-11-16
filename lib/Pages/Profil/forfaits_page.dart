@@ -188,6 +188,11 @@ class _ForfaitsPageState extends State<ForfaitsPage> {
                               ],
                             ),
                           ),
+                          SizedBox(width: 10),
+                          Text('Sur mesure',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.blanc)),
+                          SizedBox(width: 8),
                           Icon(Icons.support_agent, color: AppTheme.blanc),
                         ],
                       ),
