@@ -96,12 +96,17 @@ class KlemiBoutonSecondaire extends StatelessWidget {
           ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icone != null) ...[Icon(icone, size: 18), const SizedBox(width: 8)],
-            Text(
-              libelle,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            Flexible(
+              child: Text(
+                libelle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
             ),
           ],
         ),
