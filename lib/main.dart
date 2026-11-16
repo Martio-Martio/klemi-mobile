@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:provider/provider.dart';
 
+import 'Configuration/api_client.dart';
 import 'Configuration/app_theme.dart';
 import 'Providers/app_state.dart';
 import 'Widgets/custom_animation.dart';
@@ -12,10 +13,15 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   configLoading();
 
+  // AppState est injecté plus bas dans le Provider ; on en crée l'instance
+  // ici pour pouvoir brancher l'ApiClient (langue + token) avant toute requête.
+  final etat = AppState();
+  ApiClient.brancher(ApiClient(resoudreLangue: () => etat.langue.id));
+
   // Application en portrait uniquement
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
-  ]).then((_) => runApp(const MyApp()));
+  ]).then((_) => runApp(MyApp(etat: etat)));
 }
 
 void configLoading() {
@@ -37,7 +43,8 @@ void configLoading() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final AppState etat;
+  const MyApp({super.key, required this.etat});
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +56,8 @@ class MyApp extends StatelessWidget {
       ),
     );
 
-    return ChangeNotifierProvider(
-      create: (_) => AppState(),
+    return ChangeNotifierProvider.value(
+      value: etat,
       child: MaterialApp(
         title: 'Klemi',
         theme: AppTheme.theme(),

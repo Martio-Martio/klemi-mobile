@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Configuration/langues.dart';
 import '../Configuration/matieres.dart';
+import '../Services/auth_storage.dart';
 
 /// État de session côté app (langue, progression, forfait).
 /// À brancher sur l'API : les valeurs sont initialisées en local pour la démo.
@@ -12,6 +13,15 @@ class AppState extends ChangeNotifier {
 
   Langue _langue = languesDisponibles[2]; // Bamanankan par défaut (démo)
   bool _connecte = false;
+
+  /// Token JWT courant, en mémoire uniquement. La persistance sécurisée est
+  /// dans [AuthStorage]. `null` si l'utilisateur n'est pas connecté.
+  String? _accessToken;
+
+  /// Catalogue public des features backend (chargé au démarrage via
+  /// `GET /platform/features`). Vide tant que l'appel n'a pas abouti —
+  /// les écrans qui dépendent d'une feature doivent tolérer l'absence.
+  Map<String, dynamic> features = const {};
 
   int points = 1240;
   int serieJours = 5;
@@ -45,6 +55,7 @@ class AppState extends ChangeNotifier {
 
   Langue get langue => _langue;
   bool get connecte => _connecte;
+  String? get accessToken => _accessToken;
   /// Niveau d'études (collège, lycée…). Distinct de [niveau], le palier de progression.
   NiveauEtudes get niveauEtudes => _niveau;
 
@@ -107,9 +118,29 @@ class AppState extends ChangeNotifier {
 
   Future<void> deconnecter() async {
     _connecte = false;
+    _accessToken = null;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_cleConnecte, false);
+    await AuthStorage.vider();
+  }
+
+  /// Enregistre une session authentifiée : tokens persistés en Keychain /
+  /// EncryptedSharedPreferences via [AuthStorage], flag `connecte` persisté
+  /// en SharedPreferences.
+  Future<void> definirSession({required String accessToken, String? refreshToken}) async {
+    _accessToken = accessToken;
+    _connecte = true;
+    notifyListeners();
+    await AuthStorage.enregistrer(accessToken: accessToken, refreshToken: refreshToken);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_cleConnecte, true);
+  }
+
+  /// Met à jour le catalogue de features exposé par le backend.
+  void definirFeatures(Map<String, dynamic> nouvelles) {
+    features = Map.unmodifiable(nouvelles);
+    notifyListeners();
   }
 
   Future<void> charger() async {
@@ -122,6 +153,14 @@ class AppState extends ChangeNotifier {
       );
     }
     _connecte = prefs.getBool(_cleConnecte) ?? false;
+    if (_connecte) {
+      _accessToken = await AuthStorage.accessToken();
+      // Session invalide : flag levé mais token absent → forcer la déconnexion.
+      if (_accessToken == null || _accessToken!.isEmpty) {
+        _connecte = false;
+        await prefs.setBool(_cleConnecte, false);
+      }
+    }
     final niveau = prefs.getString(_cleNiveau);
     if (niveau != null) {
       _niveau = NiveauEtudes.values.firstWhere((n) => n.name == niveau, orElse: () => _niveau);

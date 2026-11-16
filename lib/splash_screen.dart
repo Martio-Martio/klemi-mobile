@@ -6,6 +6,7 @@ import 'Configuration/app_theme.dart';
 import 'Pages/Auth/connexion_page.dart';
 import 'Pages/app_shell.dart';
 import 'Providers/app_state.dart';
+import 'Services/platform_features_api.dart';
 
 /// Écran de démarrage : charge la session locale puis ouvre l'app native
 /// (plus d'ouverture du site web).
@@ -25,8 +26,12 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _demarrer() async {
     final etat = context.read<AppState>();
+    // Charger la session persistée ET le catalogue de features en parallèle.
+    // L'échec du GET /platform/features est silencieux (voir
+    // PlatformFeaturesApi.charger) pour ne pas bloquer le démarrage offline.
     await Future.wait([
       etat.charger(),
+      PlatformFeaturesApi().charger().then(etat.definirFeatures),
       Future.delayed(const Duration(milliseconds: 1600)),
     ]);
     if (!mounted) return;

@@ -13,6 +13,25 @@ flutter analyze
 flutter test
 ```
 
+## Environnements API
+
+L'URL de base de `klemi-api` est injectée au build via `--dart-define=API_BASE_URL=…`.
+Default : dev Railway.
+
+```bash
+# Dev (Railway, défaut si --dart-define absent)
+flutter run
+
+# Prod
+flutter run --dart-define=API_BASE_URL=https://api.klemi.ci/api
+
+# Backend local (npm run start:dev côté klemi-api)
+flutter run --dart-define=API_BASE_URL=http://localhost:7501/api
+
+# Mode mock (ignore l'API, utilise mock_feed.dart / mock_social.dart)
+flutter run --dart-define=USE_MOCK=true
+```
+
 ## Structure
 
 ```

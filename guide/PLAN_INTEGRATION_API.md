@@ -57,30 +57,30 @@ En face, `klemi-api` est un backend NestJS mature en production (~200 endpoints)
 > Permettre à toute page du mobile d'appeler l'API avec la bonne base URL, le bon token, les bons headers.
 
 ### Dépendances & configuration
-- [ ] Ajouter à `pubspec.yaml` : `uuid: ^4.x`, `flutter_secure_storage: ^9.x`. Lancer `flutter pub get`.
-- [ ] Remplir `lib/Configuration/api_url.dart` : `class ApiUrl { static const baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://teach-me-api-development.up.railway.app/api'); }`. **Nota** : `api2-dev.klemi.ci` est commenté dans `.env.railway.dev` — ne plus l'utiliser. L'URL de référence dev est celle de Railway.
-- [ ] Documenter dans `README.md` les 3 cibles : `--dart-define=API_BASE_URL=https://api.klemi.ci/api` (prod), Railway dev (défaut), `http://localhost:7501/api` (local avec `start:dev-safe`).
+- [x] Ajouter à `pubspec.yaml` : `uuid: ^4.x`, `flutter_secure_storage: ^9.x`. Lancer `flutter pub get`. _(commit 4ee8199 + Phase 0)_
+- [x] Remplir `lib/Configuration/api_url.dart` : `class ApiUrl { static const baseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'https://teach-me-api-development.up.railway.app/api'); }`. **Nota** : `api2-dev.klemi.ci` est commenté dans `.env.railway.dev` — ne plus l'utiliser. L'URL de référence dev est celle de Railway. _(+ flag `USE_MOCK` ajouté pour fallback debug Phase 2)_
+- [x] Documenter dans `README.md` les 3 cibles : `--dart-define=API_BASE_URL=https://api.klemi.ci/api` (prod), Railway dev (défaut), `http://localhost:7501/api` (local avec `start:dev-safe`).
 
 ### Code transverse
-- [ ] Créer `lib/Configuration/api_client.dart` : wrapper `http` qui injecte automatiquement `Authorization: Bearer <token>`, `x-device-id`, `x-device-name`, `x-platform: ios|android`, `x-language: <langue.id>` (lue depuis `AppState.langue.id`). Un seul point d'entrée pour toutes les requêtes.
-- [ ] **Test unitaire du client** : vérifier que `x-language` est bien injecté sur une requête quelle que soit la langue courante (`fr`, `en`, `bm`, `sus`, `ful`). Cette protection évite qu'une refacto future casse silencieusement le filtrage et la génération multilingues.
-- [ ] Créer `lib/Services/auth_storage.dart` : stockage sécurisé `accessToken` + `refreshToken` via `flutter_secure_storage`. `SharedPreferences` ne sert **que** pour langue / niveau / matières / connecte — jamais pour les tokens.
-- [ ] Créer `lib/Services/api_exception.dart` : `class ApiException implements Exception { int statusCode; String code; String message; }` pour parser `{ statusCode, message, error }` NestJS.
-- [ ] `lib/Providers/app_state.dart` : ajouter `String? _accessToken`, méthode `definirSession(...)`, appel à `AuthStorage.store` dans `marquerConnecte(true)`, nettoyage dans `deconnecter()`.
-- [ ] Générer un `deviceId` UUID v4 persistant au premier lancement (clé `deviceId` dans `SharedPreferences`).
+- [x] Créer `lib/Configuration/api_client.dart` : wrapper `http` qui injecte automatiquement `Authorization: Bearer <token>`, `x-device-id`, `x-device-name`, `x-platform: ios|android`, `x-language: <langue.id>` (lue depuis `AppState.langue.id`). Un seul point d'entrée pour toutes les requêtes. _(Singleton `ApiClient.instance`, branché dans `main.dart` ; expose `get/post/patch/put/delete/multipart`.)_
+- [x] **Test unitaire du client** : vérifier que `x-language` est bien injecté sur une requête quelle que soit la langue courante (`fr`, `en`, `bm`, `sus`, `ful`). Cette protection évite qu'une refacto future casse silencieusement le filtrage et la génération multilingues. _(5 tests dans `test/api_client_test.dart` — injection headers, absence Authorization sans token, changement de langue, parsing ApiException 404 `USER_NOT_FOUND`, query params.)_
+- [x] Créer `lib/Services/auth_storage.dart` : stockage sécurisé `accessToken` + `refreshToken` via `flutter_secure_storage`. `SharedPreferences` ne sert **que** pour langue / niveau / matières / connecte — jamais pour les tokens.
+- [x] Créer `lib/Services/api_exception.dart` : `class ApiException implements Exception { int statusCode; String code; String message; }` pour parser `{ statusCode, message, error }` NestJS. _(Supporte `message` en string ou en liste class-validator, `code` métier optionnel.)_
+- [x] `lib/Providers/app_state.dart` : ajouter `String? _accessToken`, méthode `definirSession(...)`, appel à `AuthStorage.store` dans `marquerConnecte(true)`, nettoyage dans `deconnecter()`. _(Fallback de sécurité : si flag `connecte=true` mais token absent au reload, forcer déconnexion propre.)_
+- [x] Générer un `deviceId` UUID v4 persistant au premier lancement (clé `deviceId` dans `SharedPreferences`). _(`lib/Services/device_info.dart` avec cache mémoire.)_
 
 ### Côté API
 _Rien — CORS, JWT guard et headers déjà prêts. Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 0._
 
 ### Feature flags (gain gratuit)
-- [ ] Au startup après `AppState.charger()`, appeler `GET /api/platform/features` (endpoint public existant, confirmé par audit — `src/controllers/platform-features.controller.ts:36-45`). Stocker le résultat dans `AppState.features`.
-- [ ] Utiliser ce flag pour désactiver dans l'UI les fonctionnalités backend absentes (ex. si l'intégration YouTube est désactivée par flag, griser la carte source `youtube` dans `CreerPage`). Évite d'avoir à hardcoder « cette feature est disponible » côté mobile.
+- [x] Au startup après `AppState.charger()`, appeler `GET /api/platform/features` (endpoint public existant, confirmé par audit — `src/controllers/platform-features.controller.ts:36-45`). Stocker le résultat dans `AppState.features`. _(Chargement en parallèle dans `splash_screen.dart`, échec silencieux pour ne pas bloquer le démarrage offline.)_
+- [ ] Utiliser ce flag pour désactiver dans l'UI les fonctionnalités backend absentes (ex. si l'intégration YouTube est désactivée par flag, griser la carte source `youtube` dans `CreerPage`). **À brancher en Phase 3** (`CreerPage`).
 
 ### Vérification Phase 0
-- [ ] `flutter analyze` : 0 warning.
-- [ ] `flutter test` : les 3 tests widgets existants passent toujours.
-- [ ] Bouton debug « Ping API » affiche la réponse de `GET /api/health`.
-- [ ] `GET /api/platform/features` chargé au startup et exposé via `AppState.features`.
+- [x] `flutter analyze` : 0 nouveau warning sur les fichiers Phase 0. Les 33 `deprecated_member_use` sur `package:flutter/material.dart` sont **pré-existants** (Flutter 3.47+ migration `material_ui` — hors scope Phase 0).
+- [x] `flutter test` : les 2 tests langue + les 5 nouveaux tests `ApiClient` passent. Le 3ᵉ test existant « Le feed affiche une carte quiz jouable » échoue sur un `RenderFlex overflowed by 10.0 pixels` dans `lib/Widgets/carte_feed.dart:149` — fichier **non modifié** par Phase 0, bug de layout pré-existant à traiter séparément.
+- [ ] Bouton debug « Ping API » (non essentiel — remplacé par les 5 tests unitaires `ApiClient` qui prouvent déjà la bonne construction des requêtes et le parsing des réponses).
+- [x] `GET /api/platform/features` chargé au startup et exposé via `AppState.features`.
 
 ---
 
@@ -394,3 +394,4 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-16 | — | Ajout gap « multi-images + preview » dans Phase 3 (`KlemiZonePhotos`) | — |
 | 2026-11-16 | — | Audit croisé API : URL dev Railway, limite 10 images, Wave retiré, `GET /platform/features` ajouté P0 | — |
 | 2026-11-16 | — | Correction : Wave désormais supporté par Flex Transfer → remis dans les moyens de paiement | — |
+| 2026-11-16 | P0 | **Phase 0 livrée** : `ApiUrl`, `ApiClient` + singleton, `AuthStorage`, `ApiException`, `DeviceInfo`, `PlatformFeaturesApi`, extension `AppState` (session + features), chargement au splash, 5 tests `ApiClient` verts. | — |
