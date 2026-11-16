@@ -49,12 +49,10 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_launcher_icons: ^0.14.4
 
-  material_ui: any
   intl: any
   path: any
   path_provider: any
   sqflite: any
-  cupertino_ui: any
 flutter_icons:
   android: true
   ios: true
@@ -111,6 +109,11 @@ flutter:
           weight: 100
         - asset: assets/fonts/Lato/Lato-Black.ttf
           weight: 100
+    # Sous-ensemble de Noto Sans (OFL) : lettres absentes de Lato
+    # (ɛ, ɔ, ɓ, ɗ, ŋ) utilisées par le bamanankan, le soso et le pular.
+    - family: NotoSansFallback
+      fonts:
+        - asset: assets/fonts/NotoSansFallback-Regular.ttf
   # fonts:
   #   - family: Schyler
   #     fonts:
