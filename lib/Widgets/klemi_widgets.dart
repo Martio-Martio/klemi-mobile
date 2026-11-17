@@ -346,7 +346,8 @@ class ChipType extends StatelessWidget {
 }
 
 /// Chip de langue (« FR ▾ ») en haut des écrans. Sans `code`, affiche la
-/// langue courante ; sans `onTap`, ouvre le sélecteur de langue.
+/// langue d'interface (lecture fr/en, sinon la langue audio choisie) ;
+/// sans `onTap`, ouvre le sélecteur de langue.
 class ChipLangue extends StatelessWidget {
   final String? code;
   final VoidCallback? onTap;
@@ -354,7 +355,7 @@ class ChipLangue extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final code = this.code ?? context.watch<AppState>().langue.code;
+    final code = this.code ?? context.watch<AppState>().langueInterface.code;
     return InkWell(
       onTap: onTap ?? () => ouvrirSelecteurLangue(context),
       borderRadius: BorderRadius.circular(999),
@@ -370,7 +371,11 @@ class ChipLangue extends StatelessWidget {
           children: [
             Text(
               code,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontFamilyFallback: AppTheme.famillesSecours,
+              ),
             ),
             const Icon(Icons.expand_more, size: 14),
           ],

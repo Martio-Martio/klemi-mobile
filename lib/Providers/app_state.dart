@@ -16,6 +16,7 @@ import '../Services/social_api.dart';
 class AppState extends ChangeNotifier {
   static const _cleLangue = 'langue';
   static const _cleLangueAudio = 'langueAudio';
+  static const _cleLangueInterface = 'langueInterface';
   static const _cleConnecte = 'connecte';
 
   /// Langue de **lecture** — gouverne les contenus écrits (quiz, fiches,
@@ -26,6 +27,12 @@ class AppState extends ChangeNotifier {
   /// Langue d'**écoute** — gouverne les podcasts. Peut valoir n'importe
   /// quelle langue de [languesAudio], y compris les langues locales.
   Langue _langueAudio = langueAudioParDefaut;
+
+  /// Langue affichée par le chip et la feuille de sélection. Suit le dernier
+  /// choix de ce sélecteur : la langue de lecture quand elle est fr/en, sinon
+  /// la langue audio qui vient d'être choisie. Les réglages continuent de
+  /// piloter [langue] et [langueAudio] séparément.
+  Langue _langueInterface = langueLectureParDefaut;
 
   bool _connecte = false;
 
@@ -87,6 +94,7 @@ class AppState extends ChangeNotifier {
 
   Langue get langue => _langue;
   Langue get langueAudio => _langueAudio;
+  Langue get langueInterface => _langueInterface;
   bool get connecte => _connecte;
   String? get accessToken => _accessToken;
   /// Niveau d'études (collège, lycée…). Distinct de [niveau], le palier de progression.
@@ -318,6 +326,7 @@ class AppState extends ChangeNotifier {
   Future<void> charger() async {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getString(_cleLangue);
+    var interfaceDepuisAncienneLangue = false;
     if (id != null) {
       final trouve = languesDisponibles.firstWhere(
         (l) => l.id == id,
@@ -329,6 +338,8 @@ class AppState extends ChangeNotifier {
         _langue = trouve;
       } else {
         _langueAudio = trouve;
+        _langueInterface = trouve;
+        interfaceDepuisAncienneLangue = true;
       }
     }
     final idAudio = prefs.getString(_cleLangueAudio);
@@ -337,6 +348,15 @@ class AppState extends ChangeNotifier {
         (l) => l.id == idAudio,
         orElse: () => _langueAudio,
       );
+    }
+    final idInterface = prefs.getString(_cleLangueInterface);
+    if (idInterface != null) {
+      _langueInterface = languesDisponibles.firstWhere(
+        (l) => l.id == idInterface,
+        orElse: () => _langue,
+      );
+    } else if (!interfaceDepuisAncienneLangue) {
+      _langueInterface = _langue;
     }
     _connecte = prefs.getBool(_cleConnecte) ?? false;
     if (_connecte) {
@@ -356,17 +376,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Fixe la langue de **lecture** (quiz/fiche). Si [langue] n'est pas une
-  /// langue de lecture valide (fr/en), on la redirige vers [choisirLangueAudio]
-  /// pour préserver l'intention utilisateur.
+  /// Fixe la langue de **lecture** (quiz/fiche) et la langue affichée par le
+  /// chip. Si [langue] n'est pas une langue de lecture valide (fr/en), la
+  /// lecture ne change pas : le choix part vers [choisirLangueAudio] et le
+  /// chip affiche cette langue audio.
   Future<void> choisirLangue(Langue langue) async {
     if (!estLangueLecture(langue)) {
-      return choisirLangueAudio(langue);
+      _langueInterface = langue;
+      await choisirLangueAudio(langue);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cleLangueInterface, langue.id);
+      return;
     }
     _langue = langue;
+    _langueInterface = langue;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_cleLangue, langue.id);
+    await prefs.setString(_cleLangueInterface, langue.id);
   }
 
   /// Fixe la langue d'**écoute** (podcast). Accepte les 5 langues de

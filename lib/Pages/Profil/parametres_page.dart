@@ -94,7 +94,7 @@ class ParametresPage extends StatelessWidget {
                         'Les contenus écrits (quiz, fiches) ne sont disponibles qu\'en français ou anglais. Les podcasts le sont aussi en langues locales.',
                     enfants: [
                       _ChoixLangues(etat: etat),
-                      _LigneValeur("Langue de l'interface", etat.langue.nom,
+                      _LigneValeur("Langue de l'interface", etat.langueInterface.nom,
                           onTap: () => ouvrirSelecteurLangue(context)),
                     ],
                   ),

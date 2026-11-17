@@ -56,7 +56,7 @@ Future<void> ouvrirSelecteurLangue(BuildContext context) {
               for (final l in languesDisponibles)
                 _Ligne(
                   langue: l,
-                  selectionnee: l.id == etat.langue.id,
+                  selectionnee: l.id == etat.langueInterface.id,
                   onTap: () async {
                     await ctx.read<AppState>().choisirLangue(l);
                     if (ctx.mounted) Navigator.of(ctx).pop();

@@ -14,7 +14,7 @@ class LanguePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final etat = context.watch<AppState>();
-    final choisie = etat.langue;
+    final choisie = etat.langueInterface;
 
     return Scaffold(
       body: SafeArea(

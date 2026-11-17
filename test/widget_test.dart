@@ -111,11 +111,11 @@ void main() {
     await tester.tap(find.text('Pular'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    // Phase 2 : Pular n'est pas une langue de lecture — le choix est redirigé
-    // sur `langueAudio` par `AppState.choisirLangue` pour préserver l'intention.
-    // `langue` reste donc à sa valeur par défaut (fr) et `langueAudio` passe à ful.
+    // Pular n'est pas une langue de lecture : la lecture reste fr, l'audio
+    // passe à ful, et le chip d'interface affiche quand même ce choix.
     expect(etat.langue.id, 'fr');
     expect(etat.langueAudio.id, 'ful');
+    expect(etat.langueInterface.id, 'ful');
     expect(find.text('ouvrir'), findsOneWidget);
   });
 }
