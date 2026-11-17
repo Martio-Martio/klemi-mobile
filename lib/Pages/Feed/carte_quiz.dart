@@ -5,6 +5,7 @@ import '../../Configuration/app_theme.dart';
 import '../../Models/feed_item.dart';
 import '../../Providers/app_state.dart';
 import '../../Services/mobile_feed_api.dart';
+import '../../Services/social_api.dart';
 import '../../Widgets/carte_feed.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../Social/commentaires_sheet.dart';
@@ -34,8 +35,11 @@ class _CarteQuizState extends State<CarteQuiz> {
   String? _explicationServeur;
   int? _pointsGagnesServeur;
   bool _envoiEnCours = false;
+  bool _aime = false;
+  late int _likes = widget.quiz.likes;
 
   late final MobileFeedApi _api = widget.api ?? MobileFeedApi();
+  late final SocialApi _social = SocialApi();
 
   bool get _repondu => _choix != null;
   bool get _bonne => _choix == widget.quiz.bonneReponse;
@@ -71,8 +75,31 @@ class _CarteQuizState extends State<CarteQuiz> {
     }
   }
 
-  /// Actions sociales (like / save / partage) encore en 501 côté API —
-  /// cf. plan Phase 2. On informe l'utilisateur sans échouer.
+  /// Toggle like optimiste : flip local immédiat, rollback si l'API échoue.
+  Future<void> _toggleLike() async {
+    final etaitAime = _aime;
+    setState(() {
+      _aime = !_aime;
+      _likes += _aime ? 1 : -1;
+    });
+    try {
+      if (etaitAime) {
+        await _social.unlikeItem(widget.quiz.id);
+      } else {
+        await _social.likeItem(widget.quiz.id);
+      }
+    } catch (_) {
+      // Rollback silencieux — resync au prochain fetch du feed.
+      if (!mounted) return;
+      setState(() {
+        _aime = etaitAime;
+        _likes = widget.quiz.likes + (etaitAime ? 1 : 0);
+      });
+    }
+  }
+
+  /// Actions sociales encore non livrées côté API (save/share). On informe
+  /// l'utilisateur sans échouer.
   void _bientot(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -91,8 +118,16 @@ class _CarteQuizState extends State<CarteQuiz> {
       prochain: widget.prochain,
       couleurAccent: AppTheme.orange,
       actions: [
-        ActionRail(Icons.favorite_border, formatCompteur(q.likes), onTap: () => _bientot(context)),
-        ActionRail(Icons.chat_bubble_outline, '318', onTap: () => ouvrirCommentaires(context)),
+        ActionRail(
+          _aime ? Icons.favorite : Icons.favorite_border,
+          formatCompteur(_likes),
+          onTap: _toggleLike,
+        ),
+        ActionRail(
+          Icons.chat_bubble_outline,
+          '318',
+          onTap: () => ouvrirCommentaires(context, titre: q.titre, contentId: q.id),
+        ),
         ActionRail(Icons.bookmark_border, 'Garder', onTap: () => _bientot(context)),
         ActionRail(Icons.ios_share, 'Partager', onTap: () => _bientot(context)),
       ],

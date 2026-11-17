@@ -3,10 +3,20 @@ import 'package:flutter/material.dart';
 import '../../Configuration/app_theme.dart';
 import '../../Data/mock_social.dart';
 import '../../Models/social.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/social_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 
 /// Feuille de commentaires ouverte depuis le rail d'une carte du feed.
-Future<void> ouvrirCommentaires(BuildContext context, {String? titre}) {
+/// Si [contentId] est fourni, charge les commentaires via l'API ; sinon
+/// retombe sur les données de démo (utile tant que l'API n'est pas branchée
+/// ou pour la carte podcast qui n'a pas encore d'ID connu).
+Future<void> ouvrirCommentaires(
+  BuildContext context, {
+  String? titre,
+  String? contentId,
+  SocialApi? api,
+}) {
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -14,21 +24,34 @@ Future<void> ouvrirCommentaires(BuildContext context, {String? titre}) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
-    builder: (_) => _CommentairesSheet(titre: titre),
+    builder: (_) => _CommentairesSheet(titre: titre, contentId: contentId, api: api),
   );
 }
 
 class _CommentairesSheet extends StatefulWidget {
   final String? titre;
-  const _CommentairesSheet({this.titre});
+  final String? contentId;
+  final SocialApi? api;
+  const _CommentairesSheet({this.titre, this.contentId, this.api});
 
   @override
   State<_CommentairesSheet> createState() => _CommentairesSheetState();
 }
 
 class _CommentairesSheetState extends State<_CommentairesSheet> {
-  final List<Commentaire> _liste = List.of(commentairesDemo);
+  List<Commentaire> _liste = const [];
   final _saisie = TextEditingController();
+  bool _chargement = true;
+  bool _envoi = false;
+  String? _erreur;
+
+  late final SocialApi _api = widget.api ?? SocialApi();
+
+  @override
+  void initState() {
+    super.initState();
+    _chargerPage();
+  }
 
   @override
   void dispose() {
@@ -36,13 +59,74 @@ class _CommentairesSheetState extends State<_CommentairesSheet> {
     super.dispose();
   }
 
-  void _envoyer() {
+  Future<void> _chargerPage() async {
+    final id = widget.contentId;
+    if (id == null) {
+      // Pas d'ID → fallback mock (comportement historique).
+      setState(() {
+        _liste = List.of(commentairesDemo);
+        _chargement = false;
+      });
+      return;
+    }
+    try {
+      final page = await _api.listComments(id);
+      if (!mounted) return;
+      setState(() {
+        _liste = page.commentaires;
+        _chargement = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _erreur = e.message;
+        _chargement = false;
+      });
+    } catch (_) {
+      // ApiClient pas branché : fallback mock.
+      if (!mounted) return;
+      setState(() {
+        _liste = List.of(commentairesDemo);
+        _chargement = false;
+      });
+    }
+  }
+
+  Future<void> _envoyer() async {
     final t = _saisie.text.trim();
-    if (t.isEmpty) return;
+    if (t.isEmpty || _envoi) return;
+    _saisie.clear();
+    final id = widget.contentId;
+    if (id == null) {
+      setState(() => _liste = [
+            ..._liste,
+            Commentaire(auteur: '@aminata_t', initiales: 'AT', texte: t, ilYA: 'à l\'instant'),
+          ]);
+      return;
+    }
+    // Optimiste : ajouter localement puis remplacer par la réponse serveur.
+    final local = Commentaire(auteur: '@aminata_t', initiales: 'AT', texte: t, ilYA: 'à l\'instant');
     setState(() {
-      _liste.add(Commentaire(auteur: '@aminata_t', initiales: 'AT', texte: t, ilYA: 'à l\'instant'));
-      _saisie.clear();
+      _liste = [..._liste, local];
+      _envoi = true;
     });
+    try {
+      final confirme = await _api.postComment(id, t);
+      if (!mounted) return;
+      setState(() {
+        _liste = [..._liste.where((c) => c != local), confirme];
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _liste = _liste.where((c) => c != local).toList());
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+      );
+    } catch (_) {
+      // Pas d'API dispo : on garde l'ajout local.
+    } finally {
+      if (mounted) setState(() => _envoi = false);
+    }
   }
 
   @override
@@ -79,12 +163,32 @@ class _CommentairesSheetState extends State<_CommentairesSheet> {
             ),
             const Divider(height: 1),
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                itemCount: _liste.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemBuilder: (_, i) => _Ligne(c: _liste[i]),
-              ),
+              child: _chargement
+                  ? const Center(child: CircularProgressIndicator(color: AppTheme.bleu))
+                  : (_erreur != null && _liste.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Text(
+                              'Impossible de charger les commentaires : ${_erreur!}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 13, color: AppTheme.texteSecondaire),
+                            ),
+                          ),
+                        )
+                      : (_liste.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Sois le premier à commenter.',
+                                style: TextStyle(fontSize: 13, color: AppTheme.texteSecondaire),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                              itemCount: _liste.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 14),
+                              itemBuilder: (_, i) => _Ligne(c: _liste[i]),
+                            ))),
             ),
             const Divider(height: 1),
             Padding(

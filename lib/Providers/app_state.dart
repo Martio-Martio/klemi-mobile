@@ -46,8 +46,9 @@ class AppState extends ChangeNotifier {
   int bonnesReponsesSerie = 8;
   int questionsSerie = 10;
 
-  // Abonnements (ids de créateurs suivis)
-  final Set<String> suivis = {'kone', 'klemi', 'diallo'};
+  // Abonnements (ids de créateurs suivis). Mutable pour permettre la
+  // synchronisation depuis GET /mobile/me/following au login (Phase 5).
+  Set<String> suivis = {'kone', 'klemi', 'diallo'};
 
   // Préférences (écran Paramètres)
   bool notifStreak = true;
@@ -56,6 +57,10 @@ class AppState extends ChangeNotifier {
   bool telechargerWifiSeulement = true;
   bool lectureAutoPodcast = true;
   int stockageHorsLigneMo = 142;
+
+  /// Notifications non lues — mis à jour par le centre de notifs ou via SSE
+  /// quand le badge décrémente temps réel (plan Phase 5).
+  int notificationsNonLues = 0;
 
   // Niveau d'études et matières (ajustables : collège, lycée, université…)
   static const _cleNiveau = 'niveau';
@@ -114,8 +119,32 @@ class AppState extends ChangeNotifier {
 
   bool suit(String createurId) => suivis.contains(createurId);
 
+  /// Toggle local — utilisé pour un rollback UI ou en mode mock.
+  /// Les appels serveur (`SocialApi.follow` / `unfollow`) sont déclenchés
+  /// côté `ProfilCreateurPage` avec un pattern optimiste.
   void basculerSuivi(String createurId) {
     if (!suivis.remove(createurId)) suivis.add(createurId);
+    notifyListeners();
+  }
+
+  /// Synchronise la liste des créateurs suivis depuis l'API — appelé après
+  /// `GET /mobile/me/following` au login ou au pull-to-refresh du profil.
+  void definirSuivis(Set<String> ids) {
+    suivis = {...ids};
+    notifyListeners();
+  }
+
+  /// Met à jour le compteur de notifications non lues (badge en tête de
+  /// `ProfilPage` + onglet Notifications).
+  void definirNotificationsNonLues(int n) {
+    if (notificationsNonLues == n) return;
+    notificationsNonLues = n;
+    notifyListeners();
+  }
+
+  void decrementerNotificationsNonLues() {
+    if (notificationsNonLues <= 0) return;
+    notificationsNonLues--;
     notifyListeners();
   }
 

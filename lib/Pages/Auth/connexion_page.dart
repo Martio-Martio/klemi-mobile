@@ -168,24 +168,10 @@ class _ConnexionPageState extends State<ConnexionPage> {
                 ],
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: KlemiBoutonSecondaire(
-                      libelle: 'Google',
-                      icone: Icons.language,
-                      onPressed: () {},
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: KlemiBoutonSecondaire(
-                      libelle: 'Code établissement',
-                      icone: Icons.qr_code_2,
-                      onPressed: () {},
-                    ),
-                  ),
-                ],
+              KlemiBoutonSecondaire(
+                libelle: 'Google',
+                icone: Icons.language,
+                onPressed: () {},
               ),
               const SizedBox(height: 28),
               Center(

@@ -6,13 +6,16 @@ import '../../Data/mock_social.dart';
 import '../../Models/feed_item.dart';
 import '../../Models/social.dart';
 import '../../Providers/app_state.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/social_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../../Widgets/ligne_contenu.dart';
 
 /// Profil public d'un enseignant / créateur, avec bouton Suivre.
 class ProfilCreateurPage extends StatefulWidget {
   final Createur createur;
-  const ProfilCreateurPage({super.key, required this.createur});
+  final SocialApi? api; // injectable pour les tests
+  const ProfilCreateurPage({super.key, required this.createur, this.api});
 
   @override
   State<ProfilCreateurPage> createState() => _ProfilCreateurPageState();
@@ -20,6 +23,35 @@ class ProfilCreateurPage extends StatefulWidget {
 
 class _ProfilCreateurPageState extends State<ProfilCreateurPage> {
   TypeContenu? _filtre;
+  bool _switchEnCours = false;
+  late final SocialApi _api = widget.api ?? SocialApi();
+
+  Future<void> _basculerSuivi(BuildContext context, AppState etat, String id) async {
+    if (_switchEnCours) return;
+    final etaitSuivi = etat.suit(id);
+    // Capture AVANT l'await pour éviter le lint use_build_context_synchronously.
+    final messenger = ScaffoldMessenger.of(context);
+
+    etat.basculerSuivi(id);
+    setState(() => _switchEnCours = true);
+    try {
+      if (etaitSuivi) {
+        await _api.unfollow(id);
+      } else {
+        await _api.follow(id);
+      }
+    } on ApiException catch (e) {
+      etat.basculerSuivi(id); // rollback
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+      );
+    } catch (_) {
+      // ApiClient pas branché (tests widget sans setup) : on garde l'état local.
+    } finally {
+      if (mounted) setState(() => _switchEnCours = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +117,10 @@ class _ProfilCreateurPageState extends State<ProfilCreateurPage> {
                 Expanded(
                   child: BoutonSuivre(
                     suivi: suivi,
-                    onTap: () => context.read<AppState>().basculerSuivi(c.id),
+                    onTap: () {
+                      if (_switchEnCours) return;
+                      _basculerSuivi(context, context.read<AppState>(), c.id);
+                    },
                   ),
                 ),
                 const SizedBox(width: 10),

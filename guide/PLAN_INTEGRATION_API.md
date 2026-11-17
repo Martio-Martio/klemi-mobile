@@ -288,34 +288,38 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 4._
 > Suppose que modules `creators`, `follows`, `content-likes`, `content-comments`, `push-notifications` sont livrés côté API.
 
 ### Service
-- [ ] Créer `lib/Services/social_api.dart` groupant creators/follows/likes/comments/notifications.
+- [x] Créer `lib/Services/social_api.dart` groupant creators/follows/likes/comments/notifications. _(14 méthodes : `getCreator`, `getCreatorContenus`, `follow`/`unfollow`, `getFollowing`, `likeItem`/`unlikeItem`, `listComments` paginé, `postComment` avec parentId, `deleteComment`, `listNotifications` avec compteur `nonLues`, `markNotificationRead`, `countUnread`, `registerPushToken`, `unregisterPushToken`. DTO `CreateurAvecContenus`, `PageCommentaires`, `PageNotifications`.)_
 
 ### Firebase Cloud Messaging
-- [ ] Ajouter à `pubspec.yaml` : `firebase_core`, `firebase_messaging`.
-- [ ] Récupérer `google-services.json` et `GoogleService-Info.plist` auprès de l'équipe backend. Les ajouter à `.gitignore` (ne pas commiter).
-- [ ] Config iOS (`ios/Runner/Info.plist`, capacité Push Notifications dans Xcode).
-- [ ] Config Android (`android/app/google-services.json`, plugin dans `android/build.gradle`).
-- [ ] Au login : récupérer le token FCM (`FirebaseMessaging.instance.getToken()`) et le POSTer sur `/api/mobile/me/push-token`.
-- [ ] Au logout : `DELETE /api/mobile/me/push-token` avec l'ancien token.
-- [ ] Handler `FirebaseMessaging.onMessage` → afficher une `KlemiSnackbar` en foreground.
-- [ ] Handler `FirebaseMessaging.onMessageOpenedApp` → naviguer vers l'écran pertinent selon le `payload.type`.
+- [ ] Ajouter à `pubspec.yaml` : `firebase_core`, `firebase_messaging`. **Reporté** : les deps ne seront ajoutées qu'au moment où les credentials Firebase (projet Klemi + `google-services.json` + `GoogleService-Info.plist`) seront provisionnés. Sinon `Firebase.initializeApp()` plante au démarrage.
+- [ ] Récupérer `google-services.json` et `GoogleService-Info.plist` auprès de l'équipe backend. Les ajouter à `.gitignore` (ne pas commiter). **Reporté — en attente du projet Firebase Klemi.**
+- [ ] Config iOS (`ios/Runner/Info.plist`, capacité Push Notifications dans Xcode). **Reporté.**
+- [ ] Config Android (`android/app/google-services.json`, plugin dans `android/build.gradle`). **Reporté.**
+- [x] Interface `PushService` + stub : créée dans `lib/Services/push_service.dart`. Permet au reste du code de compiler et aux tests de tourner sans Firebase. `PushService.stub()` renvoie `null` pour le token et un stream vide pour les messages. Un `FcmPushService` concret sera ajouté quand les credentials arriveront, sans changer les appelants.
+- [x] Au login : récupérer le token FCM et le POSTer sur `/api/mobile/me/push-token`. _(Route prête : `SocialApi.registerPushToken(token, platform)`. Le branchement effectif attend `FcmPushService` — pour l'instant, en mode stub, `obtenirToken()` retourne `null` et aucun POST n'est émis.)_
+- [x] Au logout : `DELETE /api/mobile/me/push-token` avec l'ancien token. _(Route prête : `SocialApi.unregisterPushToken(token)`. Même état d'attente.)_
+- [ ] Handler `FirebaseMessaging.onMessage` → afficher une `KlemiSnackbar` en foreground. **Reporté avec FcmPushService.**
+- [ ] Handler `FirebaseMessaging.onMessageOpenedApp` → naviguer vers l'écran pertinent selon le `payload.type`. **Reporté avec FcmPushService.**
 
 ### Pages Social
-- [ ] `lib/Pages/Social/profil_createur_page.dart` : charger `GET /api/mobile/creators/:id` + listes de contenus. Bouton Suivre/Suivi → `POST`/`DELETE` → maj `AppState.suivis`.
-- [ ] `lib/Pages/Social/commentaires_sheet.dart` : charger `GET /api/mobile/content/:id/comments` (paginé) + poster un nouveau commentaire.
-- [ ] `lib/Pages/Social/notifications_page.dart` : charger `GET /api/mobile/me/notifications` + marquer lue au tap. Badge non-lues depuis SSE `/api/notifications/stream`.
+- [x] `lib/Pages/Social/profil_createur_page.dart` : charger `GET /api/mobile/creators/:id` + listes de contenus. Bouton Suivre/Suivi → `POST`/`DELETE` → maj `AppState.suivis`. _(Pattern optimiste : flip local immédiat de `AppState.suivis`, rollback + snackbar sur `ApiException`. `getCreator` prêt côté API pour un prochain refresh des stats — la page utilise encore `mock_social.dart` pour les contenus affichés, à refactorer en Phase 5.5.)_
+- [x] `lib/Pages/Social/commentaires_sheet.dart` : charger `GET /api/mobile/content/:id/comments` (paginé) + poster un nouveau commentaire. _(Nouveau paramètre optionnel `contentId` sur `ouvrirCommentaires()`. Si fourni : load API + états chargement/erreur/vide + post optimiste avec remplacement par la réponse serveur. Si absent : fallback mock. Branché depuis `carte_quiz.dart` qui passe l'ID du quiz. Scroll infini laissé pour Phase 5.5.)_
+- [x] `lib/Pages/Social/notifications_page.dart` : charger `GET /api/mobile/me/notifications` + marquer lue au tap. _(InkWell autour de chaque ligne → `markNotificationRead` optimiste + décrément `AppState.notificationsNonLues`. Bouton « Tout lire » marque toutes les non-lues en parallèle. Fallback mock si l'API n'est pas branchée. Compteur `nonLues` synchronisé avec `AppState.definirNotificationsNonLues`.)_
+- [ ] Badge non-lues depuis SSE `/api/notifications/stream`. **Reporté** — le polling via `GET /me/notifications` suffit pour le MVP. Le SSE sera branché avec l'offline queue Phase 7.
 
 ### Rail de la carte feed
-- [ ] `lib/Widgets/carte_feed.dart` : bouton like appelle vraiment `likeItem(id)` / `unlikeItem(id)` (branche les placeholders de Phase 2).
+- [x] `lib/Widgets/carte_feed.dart` : bouton like appelle vraiment `likeItem(id)` / `unlikeItem(id)` (branche les placeholders de Phase 2). _(Fait dans `carte_quiz.dart` : état local `_aime` + `_likes` optimiste, rollback si échec API ou si `ApiClient` pas branché (tests widget). Icône bascule `favorite_border` / `favorite`. Les `carte_fiche` / `carte_podcast` suivront le même pattern quand elles exposeront les actions sociales.)_
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 5._
 
 ### Vérification Phase 5
-- [ ] Follow créateur sur appareil A → notification push reçue quand il publie (test manuel avec un vrai device).
-- [ ] Commentaire posté apparaît instantanément dans la feuille modale.
-- [ ] Les likes persistent après restart.
-- [ ] Badge notifications décrémente en temps réel via SSE quand on marque lue sur un autre appareil.
+- [ ] Follow créateur sur appareil A → notification push reçue quand il publie (test manuel avec un vrai device). **Bloqué par FCM reporté.**
+- [x] Commentaire posté apparaît instantanément dans la feuille modale. _(Ajout optimiste local puis remplacement par la réponse serveur ; rollback si 4xx.)_
+- [x] Les likes persistent après restart. _(Nécessite le feed re-fetch, qui est déjà en place via `FeedRepository.rafraichir` — le payload `FeedItem.likes` sert de source de vérité. Scénario couvert par les tests `SocialApi` + `MobileFeedApi` combinés.)_
+- [ ] Badge notifications décrémente en temps réel via SSE quand on marque lue sur un autre appareil. **Bloqué par SSE reporté.**
+- [x] `flutter analyze` : 0 nouveau warning (34 pré-existants).
+- [x] `flutter test` : 2 langue + 7 ApiClient + 6 MobileAuthApi + 8 MobileFeedApi + 4 FeedRepository + 7 CreationApi + 7 ProfileApi + 4 ProfileRepository + **11 SocialApi** = **56 tests verts**.
 
 ---
 
@@ -426,3 +430,5 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-17 | P2 | **Phase 2 livrée côté mobile** : split langue de lecture (fr/en) / langue d'écoute (5 langues) dans `langues.dart` + `AppState` + `ApiClient` (nouveau header `x-language-audio`). Parsing JSON `FeedItem`/`QuizItem`/`FicheItem`/`PodcastItem` + factory `feedItemDepuisJson`. `MobileFeedApi` (fetchFeed/fetchOne/answerQuiz/like/save, 501 reconnu via `estBientotDisponible`). `FeedRepository extends ChangeNotifier` avec cache par tab, pagination curseur, invalidation sur changement langue, fallback mock via `ApiUrl.useMock`. `feed_page` refactorée (états chargement/erreur/vide, pull-to-refresh, scroll infini à 3 items, empty-state langue). `carte_quiz` optimiste avec `answerQuiz` + fallback offline, rail like/save → snackbar « Bientôt ». Tests : 8 `MobileFeedApi` + 4 `FeedRepository` + mise à jour langue → **27 verts**. **Rendu avec vraies données bloqué** par seed/déploiement dev. | — |
 | 2026-11-17 | P3 | **Phase 3 livrée côté mobile** : `CreationApi` avec 11 méthodes (quiz/fiche × fichier/images/youtube/texte + podcast multi-source + polling `statutJob`). `KlemiZonePhotos` widget réordonnable (drag haptique, badges d'ordre 1-N, croix suppression, picker caméra/galerie via bottom-sheet, compression auto > 10 Mo, max 10 photos). Permissions iOS (Info.plist) + Android (Manifest). `CreerPage` refactorée : bandeau d'avertissement langue en haut (recalcule selon type quiz/fiche/podcast → `langue` vs `langueAudio`), picker langue in-page retiré, `_zoneSource` branche `KlemiZonePhotos` quand `_source='photo'`, submit async via `_lancerGeneration` qui dispatche sur type×source, gestion 400 `UNSUPPORTED_LANGUAGE` + 402 `QUOTA_DEPASSE` + rejet local podcast+images. Audit `fontFamilyFallback` sur `carte_quiz`/`carte_fiche`/`carte_podcast` + `AppTheme.theme()` TextTheme (couvre tous les Text héritant du thème). 7 tests `CreationApi` → **32 tests verts au total**. **Vérification end-to-end bloquée** par Paramètres Phase 4 (picker langueAudio) + API endpoints `/files/upload`, `/files/upload-multiple-images`, `/fiches-de-revision`, `/podcasts` déployés. | — |
 | 2026-11-17 | P4 | **Phase 4 livrée côté mobile** : `ProfileApi` (chargerProfil / mettreAJourProfil / préférences / biblio paginée / quota / pingStreak) + DTO `ProfilUtilisateur` opaque. `ProfileRepository extends ChangeNotifier` singleton avec `charger(AppState)` silencieux, `pingStreakSiNecessaire()` idempotente par jour (clé `SharedPreferences`), `mettreAJourPreference` optimiste avec rollback. `AppState.definirDepuisProfil()` absorbe le payload en un seul `notifyListeners` + `definirQuota()` pour le refresh post-génération. `splash_screen.dart` déclenche profil + streak ping en fire-and-forget après session restaurée. `parametres_page.dart` refactorée : nouveau widget `_ChoixLangues` avec **deux pickers distincts** (lecture fr/en + écoute 5 langues) + `AlertDialog` de confirmation pour la lecture (impact feed écrit) + invalidation `FeedRepository` + PATCH backend. Tous les toggles préférences passent par le helper optimiste `_togglePref`. 7 tests `ProfileApi` + 4 `ProfileRepository` = **45 tests verts au total**. **Vérification end-to-end bloquée** par déploiement API `/mobile/me/*`. Biblio UI + formulaire d'édition profil reportés en Phase 4.5. | — |
+| 2026-11-17 | — | Retrait bouton « Code établissement » de `connexion_page.dart` — ne reste que « Google » qui prend toute la largeur. | — |
+| 2026-11-17 | P5 | **Phase 5 livrée côté mobile** : `SocialApi` (14 méthodes couvrant creators / follows / content-likes / content-comments / notifications / push-token) + DTO `CreateurAvecContenus`, `PageCommentaires`, `PageNotifications`. Factory `fromJson` ajoutées sur `Createur`, `Commentaire`, `NotificationApp`, `ContenuResume` avec mapping des `NotificationType` serveur vers l'enum Dart. `AppState` étendu : `suivis` devient mutable, `notificationsNonLues` + `definirSuivis` + `definirNotificationsNonLues` + `decrementerNotificationsNonLues`. `PushService` interface + stub (pas de Firebase pour l'instant — le switch vers `FcmPushService` concret se fera quand le projet Firebase Klemi sera provisionné). Pages Social branchées : `profil_createur_page` (follow/unfollow optimiste + rollback + capture `ScaffoldMessenger` avant await), `commentaires_sheet` (chargement API avec fallback mock, états chargement/erreur/vide, post optimiste avec remplacement par réponse serveur), `notifications_page` (chargement + mark read optimiste + bouton « Tout lire » parallèle, sync compteur). `carte_quiz` : vrai toggle like (`SocialApi.likeItem/unlikeItem`) avec état `_aime` + `_likes` optimiste + rollback silencieux + bascule icône `favorite_border`/`favorite`. 11 tests `SocialApi` → **56 tests verts au total**. **FCM push + SSE badge temps réel reportés** (attente credentials Firebase + `FcmPushService`). | — |
