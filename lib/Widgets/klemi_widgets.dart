@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../Configuration/app_theme.dart';
@@ -175,6 +176,7 @@ class KlemiChamp extends StatelessWidget {
   final bool secret;
   final TextEditingController? controleur;
   final Widget? prefixe;
+  final List<TextInputFormatter>? formateurs;
 
   const KlemiChamp({
     super.key,
@@ -184,6 +186,7 @@ class KlemiChamp extends StatelessWidget {
     this.secret = false,
     this.controleur,
     this.prefixe,
+    this.formateurs,
   });
 
   @override
@@ -204,7 +207,12 @@ class KlemiChamp extends StatelessWidget {
                 controller: controleur,
                 keyboardType: type,
                 obscureText: secret,
-                style: const TextStyle(fontSize: 16, color: AppTheme.navy),
+                inputFormatters: formateurs,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: AppTheme.navy,
+                  fontFamilyFallback: AppTheme.famillesSecours,
+                ),
                 decoration: InputDecoration(hintText: indice),
               ),
             ),

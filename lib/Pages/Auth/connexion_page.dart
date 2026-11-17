@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import '../../Configuration/app_theme.dart';
+import '../../Configuration/longueurs_telephone.dart';
+import '../../Models/pays.dart';
 import '../../Services/api_exception.dart';
 import '../../Services/mobile_auth_api.dart';
 import '../../Widgets/klemi_widgets.dart';
+import '../../Widgets/selecteur_indicatif.dart';
 import 'code_page.dart';
 import 'inscription_page.dart';
 import 'langue_page.dart';
@@ -21,6 +24,7 @@ class ConnexionPage extends StatefulWidget {
 class _ConnexionPageState extends State<ConnexionPage> {
   int _mode = 0; // 0 numéro, 1 e‑mail
   final _telephone = TextEditingController();
+  Pays _pays = paysMaliSecours;
   bool _enCours = false;
 
   late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
@@ -37,14 +41,15 @@ class _ConnexionPageState extends State<ConnexionPage> {
       _afficherErreur('Entre ton numéro WhatsApp.');
       return;
     }
+    final numero = composerNumero(_pays.callingCodes, _telephone.text);
     setState(() => _enCours = true);
     EasyLoading.show(status: 'Envoi du code…');
     try {
-      final demarrage = await _api.login(_telephone.text);
+      final demarrage = await _api.login(numero);
       if (!mounted) return;
       EasyLoading.dismiss();
       Navigator.of(context).push(routeGlissante(
-        CodePage(numero: _telephone.text, tempToken: demarrage.tempToken),
+        CodePage(numero: numero, tempToken: demarrage.tempToken),
       ));
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -57,6 +62,20 @@ class _ConnexionPageState extends State<ConnexionPage> {
     } finally {
       if (mounted) setState(() => _enCours = false);
     }
+  }
+
+  void _choisirPays(Pays pays) {
+    final recoupe = recouperNumero(
+      _telephone.text,
+      longueurMaxIndicatif(pays.callingCodes),
+    );
+    if (_telephone.text != recoupe) {
+      _telephone.value = TextEditingValue(
+        text: recoupe,
+        selection: TextSelection.collapsed(offset: recoupe.length),
+      );
+    }
+    setState(() => _pays = pays);
   }
 
   void _proposerInscription() {
@@ -111,10 +130,11 @@ class _ConnexionPageState extends State<ConnexionPage> {
               if (_mode == 0) ...[
                 KlemiChamp(
                   etiquette: 'Numéro de téléphone',
-                  indice: '70 00 00 00',
+                  indice: 'Max ${longueurMaxIndicatif(_pays.callingCodes)} chiffres',
                   type: TextInputType.phone,
                   controleur: _telephone,
-                  prefixe: const IndicatifPays(),
+                  formateurs: formateursNumero(longueurMaxIndicatif(_pays.callingCodes)),
+                  prefixe: SelecteurIndicatif(pays: _pays, onChanged: _choisirPays),
                 ),
                 const SizedBox(height: 14),
                 KlemiBouton(

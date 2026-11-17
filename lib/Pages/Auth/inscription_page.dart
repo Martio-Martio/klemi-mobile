@@ -4,12 +4,15 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
+import '../../Configuration/longueurs_telephone.dart';
 import '../../Configuration/matieres.dart';
+import '../../Models/pays.dart';
 import '../../Providers/app_state.dart';
 import '../../Services/api_exception.dart';
 import '../../Services/mobile_auth_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../../Widgets/matieres_widgets.dart';
+import '../../Widgets/selecteur_indicatif.dart';
 import 'code_page.dart';
 import 'connexion_page.dart';
 
@@ -30,6 +33,7 @@ class _InscriptionPageState extends State<InscriptionPage> {
   final _telephone = TextEditingController();
   final _classe = TextEditingController();
   final _etablissement = TextEditingController();
+  Pays _pays = paysMaliSecours;
   bool _enCours = false;
 
   late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
@@ -51,12 +55,13 @@ class _InscriptionPageState extends State<InscriptionPage> {
       _afficherErreur('Renseigne ton nom et ton numéro WhatsApp.');
       return;
     }
+    final numero = composerNumero(_pays.callingCodes, _telephone.text);
 
     setState(() => _enCours = true);
     EasyLoading.show(status: 'Création du compte…');
     try {
       final demarrage = await _api.signup(
-        phone: _telephone.text,
+        phone: numero,
         role: _role == 0 ? RoleInscription.eleve : RoleInscription.enseignant,
         nom: _nom.text,
         niveauEtudes: _niveau,
@@ -71,7 +76,7 @@ class _InscriptionPageState extends State<InscriptionPage> {
       if (!mounted) return;
       EasyLoading.dismiss();
       Navigator.of(context).push(routeGlissante(
-        CodePage(numero: _telephone.text, tempToken: demarrage.tempToken),
+        CodePage(numero: numero, tempToken: demarrage.tempToken),
       ));
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -80,6 +85,20 @@ class _InscriptionPageState extends State<InscriptionPage> {
     } finally {
       if (mounted) setState(() => _enCours = false);
     }
+  }
+
+  void _choisirPays(Pays pays) {
+    final recoupe = recouperNumero(
+      _telephone.text,
+      longueurMaxIndicatif(pays.callingCodes),
+    );
+    if (_telephone.text != recoupe) {
+      _telephone.value = TextEditingValue(
+        text: recoupe,
+        selection: TextSelection.collapsed(offset: recoupe.length),
+      );
+    }
+    setState(() => _pays = pays);
   }
 
   void _afficherErreur(String message) {
@@ -124,10 +143,11 @@ class _InscriptionPageState extends State<InscriptionPage> {
               const SizedBox(height: 16),
               KlemiChamp(
                 etiquette: 'Numéro WhatsApp',
-                indice: '70 00 00 00',
+                indice: 'Max ${longueurMaxIndicatif(_pays.callingCodes)} chiffres',
                 type: TextInputType.phone,
                 controleur: _telephone,
-                prefixe: const IndicatifPays(),
+                formateurs: formateursNumero(longueurMaxIndicatif(_pays.callingCodes)),
+                prefixe: SelecteurIndicatif(pays: _pays, onChanged: _choisirPays),
               ),
               const SizedBox(height: 16),
               if (_role == 0) ...[
