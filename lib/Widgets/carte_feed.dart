@@ -145,14 +145,17 @@ class _BoutonRail extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: SizedBox(
         width: 56,
-        height: 52,
+        height: 60,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(action.icone, size: 28, color: AppTheme.navy),
+            Icon(action.icone, size: 24, color: AppTheme.navy),
             const SizedBox(height: 2),
             Text(
               action.libelle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
             ),
           ],

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:klemi/Configuration/api_client.dart';
 import 'package:klemi/Configuration/app_theme.dart';
 import 'package:klemi/Pages/Auth/langue_page.dart';
 import 'package:klemi/Pages/Feed/feed_page.dart';
 import 'package:klemi/Providers/app_state.dart';
+import 'package:klemi/Repositories/feed_repository.dart';
 import 'package:klemi/Widgets/langue_widgets.dart';
 
 Widget _envelopper(Widget page) {
@@ -17,6 +21,22 @@ Widget _envelopper(Widget page) {
 }
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    // Branche un ApiClient inerte pour permettre aux pages du feed de
+    // construire leur repository sans erreur. Les requêtes sortantes sont
+    // interceptées par le MockClient ci-dessous (répond toujours 204 vide).
+    ApiClient.brancher(ApiClient(
+      baseUrl: 'https://exemple.test/api',
+      resoudreLangue: () => 'fr',
+      resoudreToken: () async => null,
+      client: MockClient((_) async => http.Response('', 204)),
+    ));
+    // Force le repository en mode mock pour que la page feed affiche les
+    // données de démo (indépendantes du réseau).
+    FeedRepository.brancher(FeedRepository(utiliserMock: true));
+  });
+
   testWidgets('Le choix de langue propose les cinq langues', (tester) async {
     await tester.binding.setSurfaceSize(const Size(402, 874));
     addTearDown(() => tester.binding.setSurfaceSize(null));
