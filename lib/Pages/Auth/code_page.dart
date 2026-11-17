@@ -9,6 +9,8 @@ import '../../Pages/app_shell.dart';
 import '../../Providers/app_state.dart';
 import '../../Services/api_exception.dart';
 import '../../Services/mobile_auth_api.dart';
+import '../../Services/push_service.dart';
+import '../../Services/social_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 
 /// 1.3 · Saisie du code WhatsApp (6 chiffres) avec clavier intégré.
@@ -83,6 +85,10 @@ class _CodePageState extends State<CodePage> {
         accessToken: session.accessToken,
         refreshToken: session.refreshToken,
       );
+      // Enregistre le token FCM côté backend en fire-and-forget. Si Firebase
+      // n'est pas initialisé (PushService.stub), obtenirToken renvoie null
+      // et registerPushToken n'est jamais appelé.
+      unawaited(_enregistrerPushToken());
       if (!mounted) return;
       EasyLoading.dismiss();
       _vers(const AppShell());
@@ -121,6 +127,19 @@ class _CodePageState extends State<CodePage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
+  }
+
+  Future<void> _enregistrerPushToken() async {
+    final push = PushService.instance;
+    try {
+      await push.demanderPermission();
+      final token = await push.obtenirToken();
+      if (token == null || token.isEmpty) return;
+      await SocialApi().registerPushToken(token: token, platform: push.plateforme);
+    } catch (_) {
+      // Pas critique — Firebase pas configuré, pas de permission, ou erreur
+      // réseau transitoire. Re-tentera au prochain login.
+    }
   }
 
   void _vers(Widget destination) {

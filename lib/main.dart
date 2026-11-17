@@ -8,7 +8,9 @@ import 'package:provider/provider.dart';
 import 'Configuration/api_client.dart';
 import 'Configuration/app_theme.dart';
 import 'Providers/app_state.dart';
+import 'Services/fcm_push_service.dart';
 import 'Services/offline_queue.dart';
+import 'Services/push_service.dart';
 import 'Services/sentry_service.dart';
 import 'Widgets/custom_animation.dart';
 import 'splash_screen.dart';
@@ -32,6 +34,16 @@ Future<void> main() async {
 
     // Démarre la file d'actions offline (rejoue à la reconnexion).
     unawaited(OfflineQueue.instance.demarrer());
+
+    // Tente d'activer FCM. Si les configs natives (google-services.json /
+    // GoogleService-Info.plist) ne sont pas en place, on reste en mode stub
+    // sans crasher — permet aux builds dev de tourner avant `flutterfire configure`.
+    try {
+      final fcm = await FcmPushService.initialiser();
+      PushService.brancher(fcm);
+    } catch (_) {
+      // Mode stub silencieux : PushService.instance renvoie déjà un _StubPushService.
+    }
 
     // Application en portrait uniquement.
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -57,9 +69,42 @@ void configLoading() {
     ..customAnimation = CustomAnimation();
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final AppState etat;
   const MyApp({super.key, required this.etat});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  StreamSubscription<Map<String, dynamic>>? _abonnementPush;
+
+  @override
+  void initState() {
+    super.initState();
+    _abonnementPush = PushService.instance.messagesForeground.listen(_surMessagePush);
+  }
+
+  @override
+  void dispose() {
+    _abonnementPush?.cancel();
+    super.dispose();
+  }
+
+  void _surMessagePush(Map<String, dynamic> payload) {
+    final titre = payload['titre'] as String?;
+    final detail = payload['detail'] as String?;
+    if (titre == null && detail == null) return;
+    _messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text([titre, detail].whereType<String>().join(' · ')),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,11 +117,12 @@ class MyApp extends StatelessWidget {
     );
 
     return ChangeNotifierProvider.value(
-      value: etat,
+      value: widget.etat,
       child: MaterialApp(
         title: 'Klemi',
         theme: AppTheme.theme(),
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: _messengerKey,
         home: const SplashScreen(),
         builder: EasyLoading.init(),
       ),

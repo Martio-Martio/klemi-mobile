@@ -7,6 +7,8 @@ import '../Services/api_exception.dart';
 import '../Services/auth_storage.dart';
 import '../Services/mobile_auth_api.dart';
 import '../Services/profile_api.dart';
+import '../Services/push_service.dart';
+import '../Services/social_api.dart';
 
 /// État de session côté app (langue, progression, forfait).
 /// À brancher sur l'API : les valeurs sont initialisées en local pour la démo.
@@ -164,6 +166,16 @@ class AppState extends ChangeNotifier {
     // on nettoie quand même — l'utilisateur ne doit jamais rester coincé
     // en "deconnexion".
     if (_accessToken != null) {
+      // Retire le token FCM avant le logout — sinon on perd le droit
+      // d'appeler /push-token côté API (auth déjà révoquée).
+      try {
+        final token = await PushService.instance.obtenirToken();
+        if (token != null && token.isNotEmpty) {
+          await SocialApi().unregisterPushToken(token);
+        }
+      } catch (_) {
+        // Firebase pas init ou réseau indispo : best-effort.
+      }
       try {
         await MobileAuthApi().logout();
       } on ApiException {

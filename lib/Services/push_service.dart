@@ -1,14 +1,14 @@
 /// Interface des notifications push mobile. On garde un contrat abstrait pour
 /// deux raisons :
 ///   1) Les credentials Firebase (`google-services.json` / `GoogleService-Info.plist`)
-///      ne sont pas encore dans le repo — l'équipe backend les fournira avec
-///      le projet Firebase. Jusque-là, un `PushService.stub()` permet au reste
-///      du code de compiler et de tourner sans dépendre de Firebase.
+///      peuvent être absents (dev sans config, CI). Un `PushService.stub()`
+///      permet au reste du code de compiler et de tourner sans dépendre de
+///      Firebase.
 ///   2) Côté tests, on injecte un stub pour vérifier le flow login → enregistrement
 ///      du token sans réellement toucher au plugin natif.
 ///
-/// Quand les credentials seront prêts, créer un `FcmPushService` qui implémente
-/// cette interface via `firebase_core` + `firebase_messaging` (plan Phase 5).
+/// La vraie implémentation vit dans `fcm_push_service.dart` et est câblée
+/// via [PushService.brancher] au boot (main.dart) après init réussie de Firebase.
 abstract class PushService {
   /// Demande la permission de recevoir des notifications (modale système).
   /// Retourne `true` si l'utilisateur accepte ou si la permission est déjà
@@ -25,10 +25,21 @@ abstract class PushService {
   /// Stream des payloads reçus en foreground.
   Stream<Map<String, dynamic>> get messagesForeground;
 
-  /// Factory par défaut — renvoie un stub tant que Firebase n'est pas câblé.
-  /// À remplacer par `FcmPushService()` dans `main.dart` une fois le projet
-  /// Firebase Klemi provisionné.
+  /// Factory par défaut — renvoie un stub inerte.
   factory PushService.stub() = _StubPushService;
+
+  // ─── Singleton ───────────────────────────────────────────────────────
+
+  static PushService _instance = _StubPushService();
+
+  /// Récupère l'instance courante. Par défaut : stub. Remplacée par
+  /// `FcmPushService` depuis `main.dart` après init Firebase réussie.
+  static PushService get instance => _instance;
+
+  /// Branche l'implémentation concrète — appelé au boot après init Firebase.
+  static void brancher(PushService service) {
+    _instance = service;
+  }
 }
 
 class _StubPushService implements PushService {
