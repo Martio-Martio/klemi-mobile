@@ -1,0 +1,20 @@
+{
+  "@@locale": "en",
+
+  "ctaValider": "Confirm",
+  "ctaAnnuler": "Cancel",
+  "ctaRessayer": "Try again",
+  "ctaSuivant": "Next",
+  "ctaChanger": "Change",
+
+  "feedVideTitre": "No content in {langue} yet.",
+  "feedVideSousTitre": "Be the first to create one!",
+
+  "feedChargementImpossible": "Couldn't load the feed",
+  "feedTuEsHorsLigne": "You're offline. Here's what you saw last.",
+
+  "quotaDepasse": "Generation quota reached. Try Premium!",
+  "langueNonSupportee": "This language isn't supported for this content type.",
+  "reseauIndisponible": "Can't reach the server. Check your connection.",
+  "bientotDisponible": "Coming soon."
+}

@@ -127,6 +127,70 @@ class PodcastItem extends FeedItem {
   }) : super(type: TypeContenu.podcast);
 }
 
+// ────────────────────────── Sérialisation JSON (Phase 7) ────────────────────
+
+/// Round-trip `FeedItem` → Map pour le cache local (`SharedPreferences`).
+/// Les champs doivent rester compatibles avec [feedItemDepuisJson] pour que
+/// le cache serve correctement l'offline.
+Map<String, dynamic> feedItemVersJson(FeedItem item) {
+  final base = {
+    'id': item.id,
+    'titre': item.titre,
+    'langue': item.langue,
+    'auteur': {
+      'pseudo': item.auteur.pseudo,
+      'etablissement': item.auteur.etablissement,
+      'initiales': item.auteur.initiales,
+    },
+    'legende': item.legende,
+    'hashtags': item.hashtags,
+    'likes': item.likes,
+  };
+  switch (item) {
+    case QuizItem q:
+      return {
+        ...base,
+        'type': 'quiz',
+        'matiere': q.matiere,
+        'numero': q.numero,
+        'total': q.total,
+        'reponses': q.reponses,
+        'bonneReponse': q.bonneReponse,
+        'explication': q.explication,
+      };
+    case FicheItem f:
+      return {
+        ...base,
+        'type': 'fiche',
+        'sousTitre': f.sousTitre,
+        'essentiel': f.essentiel,
+        'leSaviezVous': f.leSaviezVous,
+        'dates': [
+          for (final d in f.dates) {'annee': d.annee, 'evenement': d.evenement}
+        ],
+        'lexique': [
+          for (final e in f.lexique)
+            {'mot': e.mot, 'definition': e.definition, 'traduction': e.traduction}
+        ],
+        'dureeLectureMin': f.dureeLectureMin,
+      };
+    case PodcastItem p:
+      return {
+        ...base,
+        'type': 'podcast',
+        'nomLangue': p.nomLangue,
+        'voix': p.voix,
+        'transcript': [
+          for (final t in p.transcript)
+            {'voix': t.voix, 'texte': t.texte, 'debutMs': t.debutMs}
+        ],
+        'dureeSec': p.dureeSec,
+      };
+    default:
+      throw ArgumentError('Type FeedItem non sérialisable : ${item.runtimeType}');
+  }
+}
+
 // ────────────────────────── Parsing JSON (Phase 2) ──────────────────────────
 
 /// Dispatch sur `type` et construit le sous-type approprié. Lève un

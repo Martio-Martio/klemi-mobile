@@ -1,0 +1,21 @@
+{
+  "@@locale": "ful",
+  "@@note": "Pular / ɗemngal Fulɓe — traductions placeholder, à valider par un locuteur natif (Phase 7.5).",
+
+  "ctaValider": "Jaɓu",
+  "ctaAnnuler": "Haɗu",
+  "ctaRessayer": "Eto hande",
+  "ctaSuivant": "Yettoo",
+  "ctaChanger": "Waylude",
+
+  "feedVideTitre": "Hay huunde alaa to {langue} haa jooni.",
+  "feedVideSousTitre": "A wona gaadaaɗo tagude!",
+
+  "feedChargementImpossible": "Horo heɓde feed",
+  "feedTuEsHorsLigne": "A alaa e enternet. Ko ɓooyi yiide ɗum ko woni ɗoo.",
+
+  "quotaDepasse": "Golle maa timminii. Yah to Premium!",
+  "langueNonSupportee": "Ɗemngal ngal rawnaaka ngol ɗoo.",
+  "reseauIndisponible": "Sɛrɛvɛr oo horoomaa yettaade.",
+  "bientotDisponible": "Yeeso."
+}

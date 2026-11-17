@@ -64,6 +64,10 @@ dependencies:
   # Utilisés par CreationApi pour les uploads multipart typés.
   http_parser: ^4.1.2
   mime: ^2.0.0
+
+  # Phase 7 — finitions (offline queue + observabilité)
+  connectivity_plus: ^6.0.5
+  sentry_flutter: ^8.10.1
 flutter_icons:
   android: true
   ios: true

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -6,28 +8,35 @@ import 'package:provider/provider.dart';
 import 'Configuration/api_client.dart';
 import 'Configuration/app_theme.dart';
 import 'Providers/app_state.dart';
+import 'Services/offline_queue.dart';
+import 'Services/sentry_service.dart';
 import 'Widgets/custom_animation.dart';
 import 'splash_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   configLoading();
+  SentryService.brancherFlutterError();
 
-  // AppState est injecté plus bas dans le Provider ; on en crée l'instance
-  // ici pour pouvoir brancher l'ApiClient (langue + token + refresh) avant
-  // toute requête.
-  final etat = AppState();
-  final apiClient = ApiClient(
-    resoudreLangue: () => etat.langue.id,
-    resoudreLangueAudio: () => etat.langueAudio.id,
-    rafraichirSession: etat.tenterRafraichirSession,
-  );
-  ApiClient.brancher(apiClient);
+  await SentryService.executerAppLive(() async {
+    // AppState est injecté plus bas dans le Provider ; on en crée l'instance
+    // ici pour pouvoir brancher l'ApiClient (langue + token + refresh) avant
+    // toute requête.
+    final etat = AppState();
+    final apiClient = ApiClient(
+      resoudreLangue: () => etat.langue.id,
+      resoudreLangueAudio: () => etat.langueAudio.id,
+      rafraichirSession: etat.tenterRafraichirSession,
+    );
+    ApiClient.brancher(apiClient);
 
-  // Application en portrait uniquement
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]).then((_) => runApp(MyApp(etat: etat)));
+    // Démarre la file d'actions offline (rejoue à la reconnexion).
+    unawaited(OfflineQueue.instance.demarrer());
+
+    // Application en portrait uniquement.
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    runApp(MyApp(etat: etat));
+  });
 }
 
 void configLoading() {

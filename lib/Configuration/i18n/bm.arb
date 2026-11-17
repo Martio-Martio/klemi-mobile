@@ -1,0 +1,21 @@
+{
+  "@@locale": "bm",
+  "@@note": "Bamanankan — traductions à valider par un locuteur natif (Phase 7.5).",
+
+  "ctaValider": "A sɛmɛntiya",
+  "ctaAnnuler": "A dabila",
+  "ctaRessayer": "A ɲini tugu",
+  "ctaSuivant": "A nata",
+  "ctaChanger": "A yɛlɛma",
+
+  "feedVideTitre": "{langue} kan ma foyi don fɔlɔ.",
+  "feedVideSousTitre": "I ye kɛ fɔlɔ dabila!",
+
+  "feedChargementImpossible": "An ma se ka feed ta",
+  "feedTuEsHorsLigne": "I ma be interneti kan. A kɔfɛ koloma don ye ninnu ye.",
+
+  "quotaDepasse": "I ka kɛli bɔlen. Premium ta!",
+  "langueNonSupportee": "Nin kan ma dabɔ nin kow la.",
+  "reseauIndisponible": "An ma se ka sɛrɛvɛri sɔrɔ. Ɲɛnamaya sɛgɛsɛgɛ.",
+  "bientotDisponible": "Sɔɔni."
+}

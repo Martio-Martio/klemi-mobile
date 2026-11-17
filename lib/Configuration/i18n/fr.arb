@@ -1,0 +1,24 @@
+{
+  "@@locale": "fr",
+  "@@author": "Klemi — langue de référence (Phase 7 - cadre minimal)",
+
+  "ctaValider": "Valider",
+  "ctaAnnuler": "Annuler",
+  "ctaRessayer": "Réessayer",
+  "ctaSuivant": "Suivant",
+  "ctaChanger": "Changer",
+
+  "feedVideTitre": "Pas encore de contenu en {langue}.",
+  "@feedVideTitre": {
+    "placeholders": { "langue": { "type": "String" } }
+  },
+  "feedVideSousTitre": "Sois le premier à en créer !",
+
+  "feedChargementImpossible": "Impossible de charger le feed",
+  "feedTuEsHorsLigne": "Tu es hors ligne. Voici les derniers contenus consultés.",
+
+  "quotaDepasse": "Quota de générations atteint. Pense à passer Premium !",
+  "langueNonSupportee": "Cette langue n'est pas supportée pour ce type de contenu.",
+  "reseauIndisponible": "Impossible de joindre le serveur. Vérifie ta connexion.",
+  "bientotDisponible": "Bientôt disponible."
+}

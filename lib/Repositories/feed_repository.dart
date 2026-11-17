@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Configuration/api_url.dart';
 import '../Data/mock_feed.dart';
 import '../Models/feed_item.dart';
 import '../Services/api_exception.dart';
 import '../Services/mobile_feed_api.dart';
+
+/// Limite d'items persistés par tab (plan Phase 7).
+const int kCacheMaxItems = 20;
 
 /// État d'un onglet du feed : items chargés, curseur, drapeaux UI.
 class EtatFeed {
@@ -135,10 +142,56 @@ class FeedRepository extends ChangeNotifier {
         fini: !page.aPageSuivante,
       );
     } on ApiException catch (e) {
+      // Si c'est le chargement initial (pas de curseur) et qu'on n'a rien
+      // en mémoire, on tente de servir le cache persisté avant d'afficher
+      // une erreur.
+      if (cursor == null && etat(tab).items.isEmpty) {
+        final cache = await _lireCache(tab);
+        if (cache.isNotEmpty) {
+          _etats[tab] = EtatFeed(
+            items: cache,
+            enChargement: false,
+            fini: true,
+            erreur: e,
+          );
+          notifyListeners();
+          return etat(tab);
+        }
+      }
       _etats[tab] = etat(tab).copier(enChargement: false, erreur: e);
     }
+    // Persister les N derniers items pour le prochain boot offline.
+    unawaited(_ecrireCache(tab, etat(tab).items));
     notifyListeners();
     return etat(tab);
+  }
+
+  // ─── Cache offline (Phase 7) ───────────────────────────────────────────
+
+  static String _cleCache(TabFeed tab) => 'feedCache_${tab.cle}_v1';
+
+  Future<void> _ecrireCache(TabFeed tab, List<FeedItem> items) async {
+    if (items.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final atLimite = items.take(kCacheMaxItems).toList();
+      final brut = jsonEncode(atLimite.map(feedItemVersJson).toList());
+      await prefs.setString(_cleCache(tab), brut);
+    } catch (_) {
+      // Pas critique — le cache est best-effort.
+    }
+  }
+
+  Future<List<FeedItem>> _lireCache(TabFeed tab) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final brut = prefs.getString(_cleCache(tab));
+      if (brut == null || brut.isEmpty) return const [];
+      final liste = jsonDecode(brut) as List;
+      return liste.cast<Map<String, dynamic>>().map(feedItemDepuisJson).toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   PageFeed _pageMock(TabFeed tab) {

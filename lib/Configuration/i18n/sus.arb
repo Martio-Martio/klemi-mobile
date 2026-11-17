@@ -1,0 +1,21 @@
+{
+  "@@locale": "sus",
+  "@@note": "Soso / Sosoxui — traductions placeholder, à valider par un locuteur natif (Phase 7.5).",
+
+  "ctaValider": "A ragbilen",
+  "ctaAnnuler": "A rafindi",
+  "ctaRessayer": "Nafulu fɔlɔ",
+  "ctaSuivant": "Ɲɛgbɛ",
+  "ctaChanger": "A masara",
+
+  "feedVideTitre": "{langue} xɔn nan nu bara tɔn lu.",
+  "feedVideSousTitre": "I nan a ragbilen fɔlɔ!",
+
+  "feedChargementImpossible": "Feed tɔgɔ mu mikama",
+  "feedTuEsHorsLigne": "I kɔntisa nu. I kewa ɲɛngbɛxi lu nan yi ra.",
+
+  "quotaDepasse": "I tɔgɔn kolama. Premium ki!",
+  "langueNonSupportee": "Nan kan na mu kata nde li xɔn.",
+  "reseauIndisponible": "Sɛrɛvɛri nde li mu li.",
+  "bientotDisponible": "Nya."
+}
