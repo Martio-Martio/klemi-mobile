@@ -57,6 +57,13 @@ dependencies:
   # Phase 0 — fondations transverses (intégration API)
   uuid: ^4.5.1
   flutter_secure_storage: ^9.2.4
+
+  # Phase 3 — création IA mobile (zone photos + compression)
+  image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+  # Utilisés par CreationApi pour les uploads multipart typés.
+  http_parser: ^4.1.2
+  mime: ^2.0.0
 flutter_icons:
   android: true
   ios: true
@@ -86,7 +93,6 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   # assets:
   assets:
-    - assets/images/
     - assets/logos/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg

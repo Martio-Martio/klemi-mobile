@@ -104,14 +104,23 @@ class _CartePodcastState extends State<CartePodcast> {
                 ),
                 child: Text('${p.nomLangue} · ${p.langue.toUpperCase()}',
                     style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w800, color: AppTheme.bleuFonce)),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.bleuFonce,
+                      fontFamilyFallback: AppTheme.famillesSecours,
+                    )),
               ),
             ],
           ),
           const SizedBox(height: 14),
           Text(p.titre,
               style: const TextStyle(
-                  fontSize: 26, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3)),
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                height: 1.2,
+                letterSpacing: -0.3,
+                fontFamilyFallback: AppTheme.famillesSecours,
+              )),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -289,7 +298,12 @@ class _LigneTranscription extends StatelessWidget {
             SizedBox(
               width: 48,
               child: Text(ligne.voix,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: couleurVoix)),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: couleurVoix,
+                    fontFamilyFallback: AppTheme.famillesSecours,
+                  )),
             ),
             Expanded(
               child: Text(
@@ -298,6 +312,7 @@ class _LigneTranscription extends StatelessWidget {
                   fontSize: active ? 15 : 14,
                   height: 1.45,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                  fontFamilyFallback: AppTheme.famillesSecours,
                 ),
               ),
             ),

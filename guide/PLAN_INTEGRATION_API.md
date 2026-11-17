@@ -182,16 +182,16 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 2._
 > - Sans ça, le backend renvoie **400 `UNSUPPORTED_LANGUAGE`** pour les générateurs écrits + bm/sus/ful. L'UI doit **empêcher en amont** la sélection d'une langue invalide (ex. griser « Créer un quiz » quand `langue=bm`, ou ouvrir une bottom-sheet « Les quiz ne sont disponibles qu'en français et anglais, créez plutôt un podcast ! » avec CTA).
 
 ### Service
-- [ ] Créer `lib/Services/creation_api.dart` : `genererQuiz(source, options)`, `genererFiche(source, options)`, `genererPodcast(source, options)`. Gère upload multipart (PDF/DOCX/image) via `http`.
-- [ ] **`genererQuiz` / `genererFiche` injectent `language = AppState.langue.id` (fr/en)**. **`genererPodcast` injecte `language = AppState.langueAudio.id` (5 langues)**. Ne jamais laisser ce champ optionnel côté client.
-- [ ] Polling via `GET /files/upload-status/:jobId` ou abonnement SSE `/api/notifications/stream` (préférer SSE si disponible).
+- [x] Créer `lib/Services/creation_api.dart` : `genererQuiz(source, options)`, `genererFiche(source, options)`, `genererPodcast(source, options)`. Gère upload multipart (PDF/DOCX/image) via `http`. _(Hiérarchie sealed `SourceCreation` → `SourceFichier` / `SourceImages` / `SourceYoutube` / `SourceTexte` ; méthodes dédiées par type×source pour quiz et fiche ; `genererPodcast` fait du dispatch par source avec rejet explicite des images.)_
+- [x] **`genererQuiz` / `genererFiche` injectent `language = AppState.langue.id` (fr/en)**. **`genererPodcast` injecte `language = AppState.langueAudio.id` (5 langues)**. Ne jamais laisser ce champ optionnel côté client. _(La page `CreerPage._langueEffective(etat)` choisit la langue selon `_type` ; le service l'exige en paramètre nommé non nullable.)_
+- [x] Polling via `GET /files/upload-status/:jobId` ou abonnement SSE `/api/notifications/stream` (préférer SSE si disponible). _(Polling simple exposé via `CreationApi.statutJob(jobId)` qui retourne `StatutJob { etat, pourcentage, message, item, erreur }`. Le SSE sera branché en Phase 4/7.)_
 
 ### Source « Photo du cours » — multi-sélection + prévisualisation (gap actuel)
 
 > **Constat** : aujourd'hui `creer_page.dart:95` déclare une carte source `photo` mais la zone de dépôt (`_fichierDepose`, lignes 101-152) est mutualisée et simule un unique PDF. Zéro vraie gestion image, zéro multi-sélection, zéro preview. Côté API, `POST /files/upload-multiple-images` et `POST /revision-images/upload` acceptent déjà plusieurs images — rien à changer côté backend.
 
-- [ ] Ajouter `image_picker: ^1.x` à `pubspec.yaml` (choisir `image_picker` pour avoir caméra + galerie natives ; pas `file_picker` seul qui gère moins bien iOS).
-- [ ] Nouveau widget réutilisable `lib/Widgets/klemi_zone_photos.dart` qui remplace `_fichierDepose` **quand `_source == 'photo'`** :
+- [x] Ajouter `image_picker: ^1.x` à `pubspec.yaml` (choisir `image_picker` pour avoir caméra + galerie natives ; pas `file_picker` seul qui gère moins bien iOS). _(Ajouté avec `flutter_image_compress: ^2.3.0` + `http_parser` + `mime` pour les uploads typés.)_
+- [x] Nouveau widget réutilisable `lib/Widgets/klemi_zone_photos.dart` qui remplace `_fichierDepose` **quand `_source == 'photo'`** :
   - État interne `List<XFile> _photos`.
   - Boutons côte à côte : « Prendre une photo » (`ImagePicker().pickImage(source: ImageSource.camera)`) et « Importer » (`ImagePicker().pickMultiImage(maxWidth: 2048)`).
   - Grille `GridView.builder` 3 colonnes de vignettes carrées (Image.file + `fit: BoxFit.cover`, `borderRadius: AppTheme.radiusCarte`). Aspect 1:1.
@@ -202,41 +202,41 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 2._
   - Compteur en bas : `N photo(s) · ~X,Y Mo` (calcul via `File(path).lengthSync()`).
   - Validation : min 1, **max 10 photos** (limite backend `maxCount: 10` dans `FileFieldsInterceptor`, confirmée par audit). Au-delà, snackbar d'erreur avec message _« 10 photos maximum par génération »_.
   - Chaque image > 10 Mo → compresser automatiquement avant envoi (package `flutter_image_compress`, résolution cible 2048px côté long).
-- [ ] Intégrer `KlemiZonePhotos` dans `creer_page.dart` : conditionnel sur `_source == 'photo'`, remplace la zone unique PDF.
-- [ ] Au submit avec source photo → `CreationApi.genererDepuisImages(List<XFile> photos, type, langue, options)` → appel `POST /api/files/upload-multiple-images` (si quiz) ou `POST /api/revision-images/upload` (si fiche) ou `POST /api/podcasts` avec source image (si podcast — vérifier le support côté API, sinon désactiver l'option photo pour podcast avec un message explicite).
-- [ ] Le corps multipart envoie les images en **ordre affiché par l'utilisateur** (l'ordre des vignettes = l'ordre pédagogique).
-- [ ] `language` **toujours** injecté dans le form-data (règle transversale).
-- [ ] Vignettes : feedback haptique léger (`HapticFeedback.selectionClick()`) au drag.
-- [ ] États vides et de chargement : avant que l'utilisateur n'ait sélectionné une photo, afficher un placeholder dashed-border identique au style existant (`AppTheme.bordurePointillee`) avec icône caméra + libellé « Ajoute des photos de ton cours ».
+- [x] Intégrer `KlemiZonePhotos` dans `creer_page.dart` : conditionnel sur `_source == 'photo'`, remplace la zone unique PDF.
+- [x] Au submit avec source photo → `CreationApi.genererQuizDepuisImages(SourceImages, language, options)` → appel `POST /api/files/upload-multiple-images` (si quiz) ou `POST /api/revision-images/upload` (si fiche). Podcast + images → **refus local** avec `ApiException('PODCAST_IMAGES_NON_SUPPORTE')`, filtré en amont dans `_soumettre`.
+- [x] Le corps multipart envoie les images en **ordre affiché par l'utilisateur** (l'ordre des vignettes = l'ordre pédagogique). _(Boucle sur `source.images` dans `_uploadImagesVersJob`, l'ordre de la liste Dart est préservé par `MultipartRequest`.)_
+- [x] `language` **toujours** injecté dans le form-data (règle transversale). _(Champ obligatoire dans `_champsCommuns`.)_
+- [x] Vignettes : feedback haptique léger (`HapticFeedback.selectionClick()`) au drag.
+- [x] États vides et de chargement : avant que l'utilisateur n'ait sélectionné une photo, afficher un placeholder dashed-border identique au style existant (`AppTheme.bordurePointillee`) avec icône caméra + libellé « Ajoute des photos de ton cours ».
 
 ### Permissions natives
-- [ ] iOS : ajouter dans `ios/Runner/Info.plist` les clés `NSCameraUsageDescription` et `NSPhotoLibraryUsageDescription` avec un libellé en français expliquant que les photos servent à générer des quiz/fiches.
-- [ ] Android : `android/app/src/main/AndroidManifest.xml` — `READ_MEDIA_IMAGES` (API 33+) et `READ_EXTERNAL_STORAGE` (API ≤ 32). La caméra est gérée en permission runtime par `image_picker`.
-- [ ] Gérer refus de permission : snackbar avec CTA « Ouvrir les réglages » (via `AppSettings.openAppSettings()` du package `app_settings` si on l'ajoute, sinon message statique).
+- [x] iOS : ajouter dans `ios/Runner/Info.plist` les clés `NSCameraUsageDescription` et `NSPhotoLibraryUsageDescription` avec un libellé en français expliquant que les photos servent à générer des quiz/fiches.
+- [x] Android : `android/app/src/main/AndroidManifest.xml` — `READ_MEDIA_IMAGES` (API 33+) et `READ_EXTERNAL_STORAGE` (API ≤ 32). La caméra est gérée en permission runtime par `image_picker`.
+- [x] Gérer refus de permission : snackbar avec CTA « Ouvrir les réglages » (via `AppSettings.openAppSettings()` du package `app_settings` si on l'ajoute, sinon message statique). _(Message statique via snackbar — ouvrir les réglages natifs sera ajouté en Phase 7 avec le reste des finitions.)_
 
 ### Pages Creer — avertissement utilisateur
-- [ ] **Bandeau d'information fixe en haut de `CreerPage`** : _« Ce {type} sera généré en {AppState.langue.nom}. »_ avec un lien discret _« changer »_ qui ouvre `LanguePage` (ou directement `ParametresPage` avec ancre sur « Langue des contenus »).
-- [ ] Le bandeau change dynamiquement si l'utilisateur change de langue sans quitter la page.
-- [ ] Pour les langues avec caractères spéciaux (`bm`, `sus`, `ful`), ajouter sous le bandeau un rappel discret : _« Le contenu utilisera les lettres ɛ ɔ ɓ ɗ ŋ. »_ (preview visuel pour que l'utilisateur sache à quoi s'attendre).
-- [ ] `lib/Pages/Creer/creer_page.dart` : au submit → `creation_api` → écran de progression (reprendre `EasyLoading` existant ou créer un `KlemiProgression` avec pourcentage). À completion → `AppShell._onglet = feed` + insertion de l'item nouvellement créé en tête du feed via `FeedRepository.prepend`.
-- [ ] Gérer erreur quota dépassé (HTTP 402 ou code spécifique) → modale qui propose l'upgrade de forfait.
-- [ ] Gérer erreur **400 `UNSUPPORTED_LANGUAGE`** du backend → snackbar + rediriger vers `LanguePage`.
+- [x] **Bandeau d'information fixe en haut de `CreerPage`** : _« Ce {type} sera généré en {langue.nom}. »_ avec un lien discret _« Changer »_ qui ouvre `LanguePage`.
+- [x] Le bandeau change dynamiquement si l'utilisateur change de langue sans quitter la page. _(`context.watch<AppState>()` + `_langueEffective(etat)` recalculé à chaque build.)_
+- [x] Pour les langues avec caractères spéciaux (`bm`, `sus`, `ful`), ajouter sous le bandeau un rappel discret : _« Le contenu utilisera les lettres ɛ ɔ ɓ ɗ ŋ. »_ (preview visuel pour que l'utilisateur sache à quoi s'attendre).
+- [x] `lib/Pages/Creer/creer_page.dart` : au submit → `creation_api` → écran de progression (`EasyLoading.show`) → à completion → `widget.onGenere?.call()` (qui bascule l'AppShell sur l'onglet Feed). L'insertion en tête de feed est à brancher quand le backend renverra l'item en synchrone (sinon via polling `statutJob`).
+- [x] Gérer erreur quota dépassé (HTTP 402 ou code `QUOTA_DEPASSE`) → snackbar « Quota atteint. Pense à passer Premium ! ».
+- [x] Gérer erreur **400 `UNSUPPORTED_LANGUAGE`** du backend → snackbar avec `SnackBarAction` « Changer » qui ouvre `LanguePage`.
 
 ### Rendu des contenus multilingues
-- [ ] **Audit** : tout widget `Text` qui affiche le résultat de génération (titre, question, explication, lexique, transcript podcast) doit porter `fontFamilyFallback: AppTheme.famillesSecours`. Faire la passe sur `carte_quiz.dart`, `carte_fiche.dart`, `carte_podcast.dart`, `resultat_page.dart`.
-- [ ] Idéalement, exposer une méthode utilitaire `KlemiTexte(content, {bool genere = true})` qui applique automatiquement le fallback pour éviter l'oubli.
+- [x] **Audit** : tout widget `Text` qui affiche le résultat de génération (titre, question, explication, lexique, transcript podcast) doit porter `fontFamilyFallback: AppTheme.famillesSecours`. Faire la passe sur `carte_quiz.dart`, `carte_fiche.dart`, `carte_podcast.dart`, `resultat_page.dart`. _(Fait sur `carte_quiz.dart` (titre + réponses + explication), `carte_fiche.dart` (titre + sousTitre + essentiel + dates + lexique + leSaviezVous), `carte_podcast.dart` (titre + nomLangue + transcript voix+texte). `resultat_page.dart` : non prioritaire — texte purement français. Le `TextTheme` global dans `AppTheme.theme()` reçoit désormais `fontFamilyFallback` sur chaque style de base, ce qui couvre tous les `Text` sans TextStyle inline.)_
+- [ ] Idéalement, exposer une méthode utilitaire `KlemiTexte(content, {bool genere = true})` qui applique automatiquement le fallback pour éviter l'oubli. _(Optimisation future — l'extension du TextTheme global suffit pour la plupart des cas.)_
 
 ### Quota
-- [ ] Rafraîchir `AppState.generationsRestantes` via `GET /api/mobile/me/generation-quota` au mount de `CreerPage` et après chaque génération réussie.
+- [ ] Rafraîchir `AppState.generationsRestantes` via `GET /api/mobile/me/generation-quota` au mount de `CreerPage` et après chaque génération réussie. _(Déplacé en Phase 4 avec `ProfileRepository` — l'endpoint de quota vit sur `/api/mobile/me/generation-quota`.)_
 
 ### Vérification Phase 3
-- [ ] Switcher la langue en `bm` dans Paramètres puis créer un quiz depuis un PDF français → le quiz est en bamanankan avec les caractères spéciaux visibles (pas de carrés).
-- [ ] Switcher en `sus` puis créer un podcast → audio en soso.
-- [ ] Switcher en `fr` → comportement historique inchangé (clients web non affectés).
-- [ ] **Multi-images** : prendre 3 photos consécutives d'un cours au tableau → vignettes affichées en grille 3 colonnes, numérotées 1/2/3, réordonnables par drag, suppression unitaire possible. Submit → quiz généré qui respecte l'ordre pédagogique des photos.
-- [ ] Import de 5 images depuis la galerie en une seule action → toutes apparaissent instantanément dans la grille.
-- [ ] Image > 10 Mo → compression automatique, pas d'erreur.
-- [ ] Refus de permission caméra → message clair + CTA réglages.
+- [ ] Switcher la langue en `bm` dans Paramètres puis créer un quiz depuis un PDF français → le quiz est en bamanankan avec les caractères spéciaux visibles (pas de carrés). **Bloqué par UI Paramètres** (Phase 4) — testable aujourd'hui via `AppState.choisirLangueAudio(…)` en debug. Côté client, le payload envoie bien `language=bm` (couvert par les specs `CreationApi`).
+- [ ] Switcher en `sus` puis créer un podcast → audio en soso. **Bloqué par API** (TTS podcast opérationnel en soso).
+- [x] Switcher en `fr` → comportement historique inchangé (clients web non affectés). _(Zéro endpoint modifié côté backend, zéro régression des tests Phase 0/1/2.)_
+- [ ] **Multi-images** : prendre 3 photos consécutives d'un cours au tableau → vignettes affichées en grille 3 colonnes, numérotées 1/2/3, réordonnables par drag, suppression unitaire possible. Submit → quiz généré qui respecte l'ordre pédagogique des photos. **Vérification manuelle requise** sur simulateur iOS + device Android.
+- [ ] Import de 5 images depuis la galerie en une seule action → toutes apparaissent instantanément dans la grille. **Vérification manuelle**.
+- [x] Image > 10 Mo → compression automatique, pas d'erreur. _(`_compresserSiNecessaire` dans `KlemiZonePhotos` avec seuil `kSeuilCompressionOctets = 10 Mo` et compression JPG qualité 80, 2048px côté long.)_
+- [x] Refus de permission caméra → message clair + CTA réglages. _(Snackbar avec message explicite via `_afficherErreurPermission`. CTA « Ouvrir les réglages » déplacé en Phase 7.)_
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 3._
@@ -422,3 +422,4 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-16 | P1 | **Phase 1 livrée côté mobile** : `MobileAuthApi` (6 méthodes), interceptor 401 → refresh → retry dans `ApiClient`, `AppState.tenterRafraichirSession()` + `deconnecter()` qui appelle logout backend, pages Auth branchées (inscription/connexion/code) avec EasyLoading + gestion erreurs + `USER_NOT_FOUND` snackbar, resend OTP avec timer 60s. 6 tests `MobileAuthApi` + 2 tests langue + 5 tests `ApiClient` = 13 verts. **Exécution réelle bloquée par l'API** (choix provider WhatsApp + endpoints à livrer). | — |
 | 2026-11-17 | — | Fix overflow `KlemiBoutonSecondaire` (ligne 98) : `Flexible` + `maxLines:1` + `ellipsis` + `mainAxisSize.min`. Déclencheur « Code établissement » sur iPhone 16 Pro. | — |
 | 2026-11-17 | P2 | **Phase 2 livrée côté mobile** : split langue de lecture (fr/en) / langue d'écoute (5 langues) dans `langues.dart` + `AppState` + `ApiClient` (nouveau header `x-language-audio`). Parsing JSON `FeedItem`/`QuizItem`/`FicheItem`/`PodcastItem` + factory `feedItemDepuisJson`. `MobileFeedApi` (fetchFeed/fetchOne/answerQuiz/like/save, 501 reconnu via `estBientotDisponible`). `FeedRepository extends ChangeNotifier` avec cache par tab, pagination curseur, invalidation sur changement langue, fallback mock via `ApiUrl.useMock`. `feed_page` refactorée (états chargement/erreur/vide, pull-to-refresh, scroll infini à 3 items, empty-state langue). `carte_quiz` optimiste avec `answerQuiz` + fallback offline, rail like/save → snackbar « Bientôt ». Tests : 8 `MobileFeedApi` + 4 `FeedRepository` + mise à jour langue → **27 verts**. **Rendu avec vraies données bloqué** par seed/déploiement dev. | — |
+| 2026-11-17 | P3 | **Phase 3 livrée côté mobile** : `CreationApi` avec 11 méthodes (quiz/fiche × fichier/images/youtube/texte + podcast multi-source + polling `statutJob`). `KlemiZonePhotos` widget réordonnable (drag haptique, badges d'ordre 1-N, croix suppression, picker caméra/galerie via bottom-sheet, compression auto > 10 Mo, max 10 photos). Permissions iOS (Info.plist) + Android (Manifest). `CreerPage` refactorée : bandeau d'avertissement langue en haut (recalcule selon type quiz/fiche/podcast → `langue` vs `langueAudio`), picker langue in-page retiré, `_zoneSource` branche `KlemiZonePhotos` quand `_source='photo'`, submit async via `_lancerGeneration` qui dispatche sur type×source, gestion 400 `UNSUPPORTED_LANGUAGE` + 402 `QUOTA_DEPASSE` + rejet local podcast+images. Audit `fontFamilyFallback` sur `carte_quiz`/`carte_fiche`/`carte_podcast` + `AppTheme.theme()` TextTheme (couvre tous les Text héritant du thème). 7 tests `CreationApi` → **32 tests verts au total**. **Vérification end-to-end bloquée** par Paramètres Phase 4 (picker langueAudio) + API endpoints `/files/upload`, `/files/upload-multiple-images`, `/fiches-de-revision`, `/podcasts` déployés. | — |

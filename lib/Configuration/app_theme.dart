@@ -59,6 +59,10 @@ class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: beige,
       fontFamily: 'Lato',
+      // Fallback global : garantit que le contenu généré en bm/sus/ful
+      // (lettres ɛ ɔ ɓ ɗ ŋ absentes de Lato) s'affiche correctement
+      // partout où un Text hérite du TextTheme. Les TextStyle inline
+      // restants dans les cartes doivent ajouter ce fallback explicitement.
       textTheme: const TextTheme(
         headlineMedium: TextStyle(
           fontSize: 30,
@@ -66,20 +70,23 @@ class AppTheme {
           color: navy,
           letterSpacing: -0.5,
           height: 1.1,
+          fontFamilyFallback: famillesSecours,
         ),
         titleLarge: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w800,
           color: navy,
+          fontFamilyFallback: famillesSecours,
         ),
         titleMedium: TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w700,
           color: navy,
+          fontFamilyFallback: famillesSecours,
         ),
-        bodyLarge: TextStyle(fontSize: 16, color: navy),
-        bodyMedium: TextStyle(fontSize: 14, color: navy),
-        bodySmall: TextStyle(fontSize: 12, color: texteDiscret),
+        bodyLarge: TextStyle(fontSize: 16, color: navy, fontFamilyFallback: famillesSecours),
+        bodyMedium: TextStyle(fontSize: 14, color: navy, fontFamilyFallback: famillesSecours),
+        bodySmall: TextStyle(fontSize: 12, color: texteDiscret, fontFamilyFallback: famillesSecours),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

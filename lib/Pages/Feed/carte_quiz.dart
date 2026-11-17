@@ -120,6 +120,7 @@ class _CarteQuizState extends State<CarteQuiz> {
               height: 1.2,
               letterSpacing: -0.3,
               color: AppTheme.navy,
+              fontFamilyFallback: AppTheme.famillesSecours,
             ),
           ),
           const SizedBox(height: 18),
@@ -156,7 +157,12 @@ class _CarteQuizState extends State<CarteQuiz> {
                   ),
                   const SizedBox(height: 8),
                   Text(_explication,
-                      style: const TextStyle(fontSize: 14, height: 1.5, color: AppTheme.texteCorps)),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: AppTheme.texteCorps,
+                        fontFamilyFallback: AppTheme.famillesSecours,
+                      )),
                   const SizedBox(height: 12),
                   KlemiBouton(
                     libelle: q.numero >= q.total ? 'Voir le résultat' : 'Question suivante',
@@ -249,7 +255,12 @@ class _Reponse extends StatelessWidget {
             Expanded(
               child: Text(
                 texte,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: texteCouleur),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: texteCouleur,
+                  fontFamilyFallback: AppTheme.famillesSecours,
+                ),
               ),
             ),
           ],

@@ -4,6 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Klemi utilise l'appareil photo pour prendre les photos de ton cours et générer automatiquement des quiz ou fiches de révision.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Klemi accède à ta galerie pour importer les photos de ton cours et générer automatiquement des quiz ou fiches de révision.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

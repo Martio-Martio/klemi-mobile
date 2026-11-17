@@ -43,7 +43,11 @@ class _CarteFicheState extends State<CarteFiche> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(f.sousTitre,
-                    style: const TextStyle(fontSize: 13, color: AppTheme.texteSecondaire)),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.texteSecondaire,
+                      fontFamilyFallback: AppTheme.famillesSecours,
+                    )),
               ),
             ],
           ),
@@ -51,7 +55,12 @@ class _CarteFicheState extends State<CarteFiche> {
           Text(
             f.titre,
             style: const TextStyle(
-                fontSize: 26, fontWeight: FontWeight.w800, height: 1.2, letterSpacing: -0.3),
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              height: 1.2,
+              letterSpacing: -0.3,
+              fontFamilyFallback: AppTheme.famillesSecours,
+            ),
           ),
           const SizedBox(height: 14),
           SingleChildScrollView(
@@ -160,7 +169,12 @@ class _Essentiel extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(f.essentiel[i],
-                    style: const TextStyle(fontSize: 15, height: 1.45, color: AppTheme.navy)),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      height: 1.45,
+                      color: AppTheme.navy,
+                      fontFamilyFallback: AppTheme.famillesSecours,
+                    )),
               ),
             ],
           ),
@@ -176,7 +190,12 @@ class _Essentiel extends StatelessWidget {
           child: RichText(
             text: TextSpan(
               style: const TextStyle(
-                  fontSize: 13, height: 1.45, color: AppTheme.vertFonce, fontFamily: 'Lato'),
+                fontSize: 13,
+                height: 1.45,
+                color: AppTheme.vertFonce,
+                fontFamily: 'Lato',
+                fontFamilyFallback: AppTheme.famillesSecours,
+              ),
               children: [
                 const TextSpan(
                     text: 'Le savais‑tu ? ', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -211,7 +230,7 @@ class _Dates extends StatelessWidget {
                   child: Text(d.annee,
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                 ),
-                Expanded(child: Text(d.evenement, style: const TextStyle(fontSize: 14, height: 1.4))),
+                Expanded(child: Text(d.evenement, style: const TextStyle(fontSize: 14, height: 1.4, fontFamilyFallback: AppTheme.famillesSecours))),
               ],
             ),
           ),
@@ -235,10 +254,10 @@ class _Lexique extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(e.mot, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                Text(e.mot, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, fontFamilyFallback: AppTheme.famillesSecours)),
                 RichText(
                   text: TextSpan(
-                    style: const TextStyle(fontSize: 14, color: AppTheme.navy, fontFamily: 'Lato'),
+                    style: const TextStyle(fontSize: 14, color: AppTheme.navy, fontFamily: 'Lato', fontFamilyFallback: AppTheme.famillesSecours),
                     children: [
                       TextSpan(text: '${e.definition} · bm : '),
                       TextSpan(
