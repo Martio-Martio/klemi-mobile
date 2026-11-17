@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../Configuration/app_theme.dart';
 import '../../Models/feed_item.dart';
 import '../../Providers/app_state.dart';
+import '../../Services/mobile_feed_api.dart';
 import '../../Widgets/carte_feed.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../Social/commentaires_sheet.dart';
@@ -14,12 +15,14 @@ class CarteQuiz extends StatefulWidget {
   final QuizItem quiz;
   final String prochain;
   final VoidCallback onSuivant;
+  final MobileFeedApi? api; // injectable pour les tests
 
   const CarteQuiz({
     super.key,
     required this.quiz,
     required this.prochain,
     required this.onSuivant,
+    this.api,
   });
 
   @override
@@ -28,16 +31,56 @@ class CarteQuiz extends StatefulWidget {
 
 class _CarteQuizState extends State<CarteQuiz> {
   int? _choix;
+  String? _explicationServeur;
+  int? _pointsGagnesServeur;
+  bool _envoiEnCours = false;
+
+  late final MobileFeedApi _api = widget.api ?? MobileFeedApi();
 
   bool get _repondu => _choix != null;
   bool get _bonne => _choix == widget.quiz.bonneReponse;
+  int get _points => _pointsGagnesServeur ?? (_bonne ? 20 : 0);
+  String get _explication => _explicationServeur ?? widget.quiz.explication;
 
-  void _repondre(int i) {
-    if (_repondu) return;
-    setState(() => _choix = i);
-    if (i == widget.quiz.bonneReponse) {
-      context.read<AppState>().ajouterPoints(20);
+  Future<void> _repondre(int i) async {
+    if (_repondu || _envoiEnCours) return;
+
+    // Optimiste : on affiche immédiatement la correction locale, puis on
+    // réconcilie avec la réponse serveur (points + explication).
+    setState(() {
+      _choix = i;
+      _envoiEnCours = true;
+    });
+
+    final etat = context.read<AppState>();
+    try {
+      final reponse = await _api.answerQuiz(widget.quiz.id, i);
+      if (!mounted) return;
+      setState(() {
+        _explicationServeur = reponse.explication;
+        _pointsGagnesServeur = reponse.pointsGagnes;
+        _envoiEnCours = false;
+      });
+      if (reponse.pointsGagnes > 0) etat.ajouterPoints(reponse.pointsGagnes);
+    } catch (_) {
+      // Mode offline, backend indisponible, ou ApiClient pas encore branché
+      // (contexte test) : on tombe en fallback local — jamais bloquer l'UX.
+      if (!mounted) return;
+      setState(() => _envoiEnCours = false);
+      if (_bonne) etat.ajouterPoints(20);
     }
+  }
+
+  /// Actions sociales (like / save / partage) encore en 501 côté API —
+  /// cf. plan Phase 2. On informe l'utilisateur sans échouer.
+  void _bientot(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Bientôt disponible.'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -48,10 +91,10 @@ class _CarteQuizState extends State<CarteQuiz> {
       prochain: widget.prochain,
       couleurAccent: AppTheme.orange,
       actions: [
-        ActionRail(Icons.favorite_border, formatCompteur(q.likes)),
+        ActionRail(Icons.favorite_border, formatCompteur(q.likes), onTap: () => _bientot(context)),
         ActionRail(Icons.chat_bubble_outline, '318', onTap: () => ouvrirCommentaires(context)),
-        const ActionRail(Icons.bookmark_border, 'Garder'),
-        const ActionRail(Icons.ios_share, 'Partager'),
+        ActionRail(Icons.bookmark_border, 'Garder', onTap: () => _bientot(context)),
+        ActionRail(Icons.ios_share, 'Partager', onTap: () => _bientot(context)),
       ],
       contenu: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,7 +146,7 @@ class _CarteQuizState extends State<CarteQuiz> {
                 children: [
                   Text(
                     _bonne
-                        ? 'Bonne réponse ! +20 pts'
+                        ? 'Bonne réponse ! +$_points pts'
                         : 'Pas tout à fait — la bonne réponse est ${String.fromCharCode(65 + q.bonneReponse)}',
                     style: TextStyle(
                       fontSize: 15,
@@ -112,7 +155,7 @@ class _CarteQuizState extends State<CarteQuiz> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text(q.explication,
+                  Text(_explication,
                       style: const TextStyle(fontSize: 14, height: 1.5, color: AppTheme.texteCorps)),
                   const SizedBox(height: 12),
                   KlemiBouton(

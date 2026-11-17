@@ -126,3 +126,95 @@ class PodcastItem extends FeedItem {
     required this.dureeSec,
   }) : super(type: TypeContenu.podcast);
 }
+
+// ────────────────────────── Parsing JSON (Phase 2) ──────────────────────────
+
+/// Dispatch sur `type` et construit le sous-type approprié. Lève un
+/// `FormatException` si le type est inconnu — à attraper côté repository.
+FeedItem feedItemDepuisJson(Map<String, dynamic> json) {
+  final type = json['type'] as String?;
+  switch (type) {
+    case 'quiz':
+      return _quizDepuisJson(json);
+    case 'fiche':
+      return _ficheDepuisJson(json);
+    case 'podcast':
+      return _podcastDepuisJson(json);
+    default:
+      throw FormatException('Type de FeedItem inconnu : $type');
+  }
+}
+
+Auteur _auteurDepuisJson(Map<String, dynamic> json) => Auteur(
+      pseudo: json['pseudo'] as String? ?? '',
+      etablissement: json['etablissement'] as String? ?? '',
+      initiales: json['initiales'] as String? ?? '',
+    );
+
+List<String> _listeStrings(Object? raw) {
+  if (raw is List) return raw.map((e) => e.toString()).toList();
+  return const [];
+}
+
+QuizItem _quizDepuisJson(Map<String, dynamic> json) => QuizItem(
+      id: json['id'] as String,
+      titre: json['titre'] as String? ?? '',
+      langue: json['langue'] as String? ?? 'fr',
+      auteur: _auteurDepuisJson(json['auteur'] as Map<String, dynamic>? ?? const {}),
+      legende: json['legende'] as String? ?? '',
+      hashtags: _listeStrings(json['hashtags']),
+      likes: (json['likes'] as num?)?.toInt() ?? 0,
+      matiere: json['matiere'] as String? ?? '',
+      numero: (json['numero'] as num?)?.toInt() ?? 1,
+      total: (json['total'] as num?)?.toInt() ?? 1,
+      reponses: _listeStrings(json['reponses']),
+      bonneReponse: (json['bonneReponse'] as num?)?.toInt() ?? 0,
+      explication: json['explication'] as String? ?? '',
+    );
+
+FicheItem _ficheDepuisJson(Map<String, dynamic> json) => FicheItem(
+      id: json['id'] as String,
+      titre: json['titre'] as String? ?? '',
+      langue: json['langue'] as String? ?? 'fr',
+      auteur: _auteurDepuisJson(json['auteur'] as Map<String, dynamic>? ?? const {}),
+      legende: json['legende'] as String? ?? '',
+      hashtags: _listeStrings(json['hashtags']),
+      likes: (json['likes'] as num?)?.toInt() ?? 0,
+      sousTitre: json['sousTitre'] as String? ?? '',
+      essentiel: _listeStrings(json['essentiel']),
+      leSaviezVous: json['leSaviezVous'] as String? ?? '',
+      dates: ((json['dates'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((d) => DateCle(d['annee']?.toString() ?? '', d['evenement']?.toString() ?? ''))
+          .toList(),
+      lexique: ((json['lexique'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((l) => EntreeLexique(
+                l['mot']?.toString() ?? '',
+                l['definition']?.toString() ?? '',
+                l['traduction']?.toString() ?? '',
+              ))
+          .toList(),
+      dureeLectureMin: (json['dureeLectureMin'] as num?)?.toInt() ?? 3,
+    );
+
+PodcastItem _podcastDepuisJson(Map<String, dynamic> json) => PodcastItem(
+      id: json['id'] as String,
+      titre: json['titre'] as String? ?? '',
+      langue: json['langue'] as String? ?? 'fr',
+      auteur: _auteurDepuisJson(json['auteur'] as Map<String, dynamic>? ?? const {}),
+      legende: json['legende'] as String? ?? '',
+      hashtags: _listeStrings(json['hashtags']),
+      likes: (json['likes'] as num?)?.toInt() ?? 0,
+      nomLangue: json['nomLangue'] as String? ?? '',
+      voix: _listeStrings(json['voix']),
+      transcript: ((json['transcript'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map((t) => LigneTranscript(
+                t['voix']?.toString() ?? '',
+                t['texte']?.toString() ?? '',
+                (t['debutMs'] as num?)?.toInt() ?? 0,
+              ))
+          .toList(),
+      dureeSec: (json['dureeSec'] as num?)?.toInt() ?? 0,
+    );

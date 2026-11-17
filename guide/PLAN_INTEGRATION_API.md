@@ -3,7 +3,7 @@
 > **Comment utiliser ce fichier** : cochez chaque case `- [ ]` au fur et à mesure (`- [x]`) et notez le hash du commit entre parenthèses.
 > Ce fichier ne liste **que les tâches qui vivent dans `klemi-mobile`**. Le plan compagnon côté backend est dans `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 >
-> Dernière mise à jour : 2026-11-16 — version initiale.
+> Dernière mise à jour : 2026-11-17 — split langue lecture (fr/en) / audio (5 langues) après décisions côté API (Phase 1 ✅, Phase 2 ✅ + patch split, Phase 3 prête à être adaptée).
 
 ---
 
@@ -23,22 +23,28 @@ En face, `klemi-api` est un backend NestJS mature en production (~200 endpoints)
 
 ---
 
-## ⚠️ Exigence transversale — Langue de génération ET de filtrage
+## ⚠️ Exigence transversale — Langue de lecture (fr/en) + langue d'écoute (5 langues)
 
-**Règle absolue** : la langue courante de l'utilisateur (`AppState.langue.id` — `fr`, `en`, `bm`, `sus`, `ful`) gouverne **à la fois** :
-- la **langue de génération** : tout contenu créé via la page `Creer` (quiz, fiche, podcast) doit être produit **directement dans cette langue** par l'IA — pas en français traduit ensuite.
-- la **langue de filtrage** du feed : on ne doit afficher que des contenus dans la langue courante.
-- l'en-tête `x-language` injecté automatiquement par `ApiClient` sur **toutes** les requêtes (Phase 0).
+**Décision 2026-11-17 (côté produit)** : les langues locales africaines standardisées (`bm`, `sus`, `ful` avec `ɛ ɔ ɓ ɗ ŋ`) sont rarement lues couramment par les scolarisés francophones — produire du texte dans ces langues serait un mur de lecture. En revanche elles sont parlées nativement. On scinde la préférence en **deux** :
 
-**Cas concret** : si l'utilisateur a sélectionné **bamanankan** (`bm`), un upload de PDF français doit produire un quiz **en bamanankan** côté backend, avec les caractères `ɛ ɔ ɓ ɗ ŋ` correctement rendus (donc `fontFamilyFallback: AppTheme.famillesSecours` **obligatoire** sur tous les widgets `Text` qui afficheront ce contenu — Lato seul produit des carrés).
+| Préférence | Valeurs | Gouverne |
+|-----------|---------|----------|
+| `AppState.langue` (lecture) | **fr, en** | Quiz, fiches, flashcards, carte mentale (feed + génération) |
+| `AppState.langueAudio` (écoute) | **fr, en, bm, sus, ful** | Podcasts (feed + génération) |
 
 **Implications UX** :
-- La page `Creer` (Phase 3) doit **avertir visuellement** l'utilisateur de la langue dans laquelle sera généré le contenu. Un bandeau fixe en haut : _« Ce contenu sera généré en bamanankan — tu peux changer la langue dans Paramètres. »_ avec un raccourci.
-- Changer la langue dans `Paramètres` (Phase 4) doit déclencher une petite alerte : _« Les nouveaux contenus générés le seront en <langue>. Les contenus existants restent inchangés. »_
-- Au démarrage de l'app, si l'utilisateur n'a jamais choisi de langue, forcer `LanguePage` avant `AppShell` (comportement actuel du splash à préserver).
-- Dans le feed, afficher un empty-state différencié quand il n'y a pas encore de contenu dans la langue courante : _« Pas encore de contenu en <langue>. Sois le premier à en créer ! »_ avec CTA vers `CreerPage`.
+- La page `LanguePage` (ou un nouveau `ParametresLangues`) doit proposer **deux pickers** : « Ma langue de lecture » (fr/en seulement) et « Ma langue d'écoute » (5 options).
+- Au premier lancement, demander les deux (ou pré-remplir `langueAudio = langue` avec invitation à changer).
+- La page `Creer` (Phase 3) doit **afficher la langue qui s'appliquera** selon le type de contenu choisi : « Ce quiz sera généré en français », « Ce podcast sera généré en bamanankan ». Si l'utilisateur tente de créer un quiz/fiche/flashcard avec `langue=bm/sus/ful`, **l'UI doit bloquer** en amont — sinon l'API répondra **400 `UNSUPPORTED_LANGUAGE`**.
+- Dans le feed, les cartes Quiz/Fiche affichées seront en fr/en (selon `langue`), les cartes Podcast seront en `langueAudio`. Si `langueAudio ≠ langue`, l'utilisateur voit un mix normal — c'est voulu.
+- Empty-state langue : _« Pas encore de contenu en {langue.nom}. Sois le premier à en créer ! »_ reste pertinent mais calculé par type (quiz/fiche sur `langue`, podcast sur `langueAudio`).
+- `fontFamilyFallback: AppTheme.famillesSecours` reste requis sur **tout ce qui peut afficher `ɛ ɔ ɓ ɗ ŋ`** → principalement les widgets transcript du podcast et éventuellement le nom de la langue d'écoute.
 
-**Où ça impacte dans ce plan** : Phase 0 (header), Phase 2 (filtrage feed + empty-state), Phase 3 (bandeau + envoi du champ `language` à chaque génération), Phase 4 (paramètres + alerte au changement), Phase 5 (langue des commentaires), Phase 7 (fallback fonts stricte sur tout le contenu généré).
+**En-têtes HTTP** :
+- `x-language` injecté par `ApiClient` = `AppState.langue.id` (reading, fr/en).
+- Nouveau header optionnel `x-language-audio` = `AppState.langueAudio.id` pour aider le backend à résoudre côté feed si le profil n'est pas encore à jour. Côté serveur il est aussi acceptable de passer les deux via query params `?lang=&langAudio=`.
+
+**Où ça impacte** : Phase 0 (deux headers), Phase 1 (signup envoie `langue` + `langueAudio`), Phase 2 (feed query `?lang=&langAudio=`), Phase 3 (bandeau selon type, validation UI avant appel), Phase 4 (paramètres avec deux pickers), Phase 7 (fallback fonts strict sur transcript podcast en priorité).
 
 ---
 
@@ -93,6 +99,7 @@ _Rien — CORS, JWT guard et headers déjà prêts. Voir `klemi-api/guide/PLAN_I
 
 ### Pages Auth
 - [x] `lib/Pages/Auth/inscription_page.dart` : au submit → `signup(phone, role, nom, niveauEtudes, classe, etablissement, langue)` → navigue vers `code_page.dart(tempToken)`. _(EasyLoading + validation client minimale + propagation `AppState.choisirNiveau` avant navigation.)_
+- [ ] **MAJ 2026-11-17 (split langue)** : le payload `signup` accepte désormais **deux champs langue** côté API : `langue` (fr/en, défaut fr) et `langueAudio` (fr/en/bm/sus/ful, défaut = `langue` si omis). Mettre à jour `MobileAuthApi.signup` et `InscriptionPage` pour envoyer ces deux champs. Si l'app ne gère qu'une langue aujourd'hui, mapper : `langue = AppState.langue.id` si ∈ {fr,en} sinon `fr`, et `langueAudio = AppState.langue.id` (brut).
 - [x] `lib/Pages/Auth/connexion_page.dart` : au submit → `login(phone)` → `code_page.dart(tempToken)`.
 - [x] `lib/Pages/Auth/code_page.dart` : au submit → `verifyOtp(tempToken, code)` → store tokens → `AppState.definirSession(...)` → remplace la stack par `AppShell`. _(Fallback : si `tempToken=null`, va direct à AppShell → utile tant que l'API n'est pas branchée.)_
 - [x] Gérer erreur **404 `USER_NOT_FOUND`** dans `connexion_page.dart` : afficher snackbar + CTA « s'inscrire ». _(SnackBarAction qui route vers `InscriptionPage`.)_
@@ -118,50 +125,65 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 1._
 
 ---
 
-## Phase 2 — Feed mobile (vraies données)
+## Phase 2 — Feed mobile (vraies données) — **API READY 2026-11-17** ✅
 
-> Suppose que `GET /api/mobile/feed`, `GET /api/mobile/feed/:id`, `POST /api/mobile/feed/:id/answer` (et placeholders like/save) sont livrés côté API.
+> ✅ Côté API tout est livré : `GET /api/mobile/feed`, `GET /api/mobile/feed/:id`, `POST /api/mobile/feed/:id/answer`. Les endpoints `like` / `unlike` / `save` renvoient **501 `NOT_IMPLEMENTED`** avec un body JSON `{ code: 'NOT_IMPLEMENTED', message }` — à gérer gracieusement côté UI (désactiver les boutons ou afficher « Bientôt »).
+
+### Query params feed (nouveau split langue)
+Le feed accepte **deux** paramètres de langue distincts :
+- `?lang=fr|en` : langue de **lecture** (filtre quiz + fiche). Fallback = header `x-language` si fr/en, sinon `UserProfile.langue`, sinon `fr`.
+- `?langAudio=fr|en|bm|sus|ful` : langue d'**écoute** (filtre podcasts). Fallback = `UserProfile.langueAudio`, sinon `UserProfile.langue`, sinon `fr`.
+
+Exemple complet : `GET /api/mobile/feed?lang=fr&langAudio=bm&limit=20&tab=pour-toi` → quiz + fiches en français, podcasts en bamanankan, mixés round-robin.
 
 ### Service & repository
-- [ ] Créer `lib/Services/mobile_feed_api.dart` : `fetchFeed({cursor, tab})`, `fetchOne(id)`, `likeItem(id)` / `unlikeItem(id)`, `answerQuiz(id, index)`, `saveItem(id)`.
-- [ ] Créer `lib/Repositories/feed_repository.dart` : cache en mémoire des pages chargées par tab (`pourToi`, `mesCours`, `abonnements`) + pull-to-refresh.
+- [x] Créer `lib/Services/mobile_feed_api.dart` : `fetchFeed({lang, langAudio, cursor, tab, limit})`, `fetchOne(id)`, `likeItem(id)` / `unlikeItem(id)` (501), `answerQuiz(id, index)`, `saveItem(id)` (501). _(Enum `TabFeed` + helper `estBientotDisponible` pour reconnaître les 501.)_
+- [x] Créer `lib/Repositories/feed_repository.dart` : cache en mémoire des pages chargées par tab (`pourToi`, `mesCours`, `abonnements`) + pull-to-refresh. Invalider le cache quand `AppState.langue` OU `AppState.langueAudio` change. _(Extends `ChangeNotifier` : les pages écoutent via `addListener`. `invaliderTout()` + `rafraichir()` + `pageSuivante()`. Fallback mock quand `ApiUrl.useMock=true`.)_
 
 ### Pages Feed
-- [ ] `lib/Pages/Feed/feed_page.dart` : remplacer `feedDemo` par `FeedRepository.instance.pouToi()`. Ajouter états `chargement / erreur / vide`, pull-to-refresh, scroll infini (déclencheur à 3 items de la fin).
-- [ ] **Empty-state langue** : quand la liste est vide pour la langue courante, afficher _« Pas encore de contenu en {langue.nom}. Sois le premier à en créer ! »_ avec un CTA vers `CreerPage`. Distinct de l'état « pas de réseau » et de « pas d'abonnements ».
-- [ ] Rafraîchir automatiquement le feed quand `AppState.langue` change (écouter le provider).
-- [ ] `lib/Pages/Feed/mes_cours_page.dart` : même pattern avec `tab=mes-cours`.
-- [ ] `lib/Pages/Feed/abonnements_page.dart` : même pattern avec `tab=abonnements`.
-- [ ] `lib/Pages/Feed/carte_quiz.dart` : au choix réponse → `answerQuiz(id, index)` → afficher `explication` + animation points. Fallback optimiste si offline : garder l'affichage local de la bonne/mauvaise réponse.
-- [ ] `lib/Pages/Feed/resultat_page.dart` : brancher le `percentile` renvoyé par l'API à la fin d'une série.
-- [ ] Deep-link depuis Explorer (`AppShell._ouvrirDansFeed`) : utiliser `fetchOne(id)` pour injecter un item avant le reste de la page.
+- [x] `lib/Pages/Feed/feed_page.dart` : remplacer `feedDemo` par `FeedRepository.instance.pouToi()`. Ajouter états `chargement / erreur / vide`, pull-to-refresh, scroll infini (déclencheur à 3 items de la fin). _(Détection changement langue dans `didChangeDependencies`, amorçage lazy par onglet, `RefreshIndicator` en wrap du `PageView`.)_
+- [x] **Empty-state langue** : quand la liste est vide pour la langue courante, afficher _« Pas encore de contenu en {langue.nom}. Sois le premier à en créer ! »_ avec un CTA vers `CreerPage`. Distinct de l'état « pas de réseau » et de « pas d'abonnements ». _(Icon `auto_stories_outlined` + `fontFamilyFallback` déjà posé sur le nom de langue. CTA à brancher en Phase 3 quand `CreerPage` sera cliquable depuis l'extérieur.)_
+- [x] Rafraîchir automatiquement le feed quand `AppState.langue` **ou** `AppState.langueAudio` change (écouter le provider). Passer les deux au repo via `?lang=` et `?langAudio=`. _(`_langueCourante` / `_langueAudioCourante` mémorisés, `invaliderTout()` sur diff.)_
+- [ ] `lib/Pages/Feed/mes_cours_page.dart` : même pattern avec `tab=mes-cours`. _(À refactorer : la page utilise encore `mock_social.dart` ; migrer vers `FeedRepository.etat(TabFeed.mesCours)` en Phase 2.5 ou quand l'API renverra des items pour ce tab.)_
+- [ ] `lib/Pages/Feed/abonnements_page.dart` : même pattern avec `tab=abonnements`. _(Idem mesCours — bloqué par le backend qui n'a pas encore les contenus abonnements.)_
+- [x] `lib/Pages/Feed/carte_quiz.dart` : au choix réponse → `answerQuiz(id, index)` → afficher `explication` + animation points. Fallback optimiste si offline : garder l'affichage local de la bonne/mauvaise réponse. _(Points et explication serveur affichés si dispos, sinon fallback local `+20 pts`.)_
+- [ ] `lib/Pages/Feed/resultat_page.dart` : brancher le `percentile` renvoyé par l'API à la fin d'une série. _(À faire quand le backend expose le percentile sur `POST /mobile/feed/:id/answer` ou un endpoint dédié série.)_
+- [ ] Deep-link depuis Explorer (`AppShell._ouvrirDansFeed`) : utiliser `fetchOne(id)` pour injecter un item avant le reste de la page. _(Logique actuelle fait un `indexWhere` par titre — correcte tant que l'item est dans le cache, à améliorer en Phase 2.5.)_
+- [x] **Désactiver like/save** : les boutons du rail (`ActionRail`) affichent un snackbar « Bientôt disponible. » au tap. Confirmé via helper `estBientotDisponible(ApiException)` pour reconnaître les 501.
 
 ### Fallback mock
-- [ ] **Garder** `lib/Data/mock_feed.dart` et activer via `--dart-define=USE_MOCK=true` dans `FeedRepository` — utile pour dev offline et pour les tests widgets.
+- [x] **Garder** `lib/Data/mock_feed.dart` et activer via `--dart-define=USE_MOCK=true` dans `FeedRepository` — utile pour dev offline et pour les tests widgets. _(Flag `ApiUrl.useMock` lu dans le constructeur du repository.)_
 
 ### Tests
-- [ ] Mettre à jour `test/widget_test.dart` ("Le feed affiche une carte quiz jouable") pour mocker `FeedRepository`.
-- [ ] Nouveaux tests : pagination scroll infini, pull-to-refresh, erreur 500 affiche état erreur.
+- [x] Mettre à jour `test/widget_test.dart` ("Le choix de langue propose les cinq langues") : CTA attendu désormais « Commencer » (fr) au lieu de « A daminɛ » (bm), puisque la langue de lecture par défaut est fr.
+- [x] Nouveaux tests : `test/mobile_feed_api_test.dart` (8 specs : parsing 3 types + type inconnu + query params + answerQuiz + 501), `test/feed_repository_test.dart` (4 specs : amorçage/cache, pagination, invalidation+notify, rafraîchissement).
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 2._
 
 ### Vérification Phase 2
-- [ ] Scroll fluide du feed, les 3 types de cartes (quiz / fiche / podcast) s'affichent avec vraies données.
-- [ ] `flutter run --dart-define=API_BASE_URL=https://api2-dev.klemi.ci/api` : 20 items chargés, scroll déclenche page 2.
-- [ ] Mode mock (`--dart-define=USE_MOCK=true`) : app toujours fonctionnelle hors ligne.
+- [ ] Scroll fluide du feed, les 3 types de cartes (quiz / fiche / podcast) s'affichent avec vraies données. **À vérifier manuellement** sur simulateur dès que le dev Railway aura des contenus seed.
+- [ ] `flutter run --dart-define=API_BASE_URL=https://teach-me-api-development.up.railway.app/api` : 20 items chargés (après déploiement dev avec contenus seed), scroll déclenche page 2. **À vérifier manuellement**.
+- [ ] Changer `langueAudio` de `fr` à `bm` → feed se recharge, cartes podcast changent de langue mais cartes quiz/fiche restent en fr. **À vérifier manuellement** après Phase 4 (picker langues).
+- [x] Appel à `like` / `save` → UI gère le 501 proprement (snackbar « Bientôt disponible. »).
+- [x] Mode mock (`--dart-define=USE_MOCK=true`) : app toujours fonctionnelle hors ligne. Repository détecte le flag et sert `feedDemo`.
+- [x] `flutter analyze` : 0 nouveau warning — restent 33 `deprecated_member_use` sur `package:flutter/material.dart` + 1 sur `dbhelper.dart` legacy (hors scope).
+- [x] `flutter test` : 2 langue + 7 ApiClient + 6 MobileAuthApi + 8 MobileFeedApi + 4 FeedRepository = **27 tests verts**. Le test « feed affiche une carte quiz » reste bloqué par l'overflow pré-existant dans `carte_feed.dart:149` (non lié à Phase 2).
 
 ---
 
-## Phase 3 — Création IA mobile (`Creer` page) — **langue critique**
+## Phase 3 — Création IA mobile (`Creer` page) — **langue critique (split reading/audio)**
 
 > Réutilise les endpoints existants `/files/upload`, `/files/youtube-qcm`, `/fiches-de-revision`, `/podcasts`. L'endpoint quota `GET /api/mobile/me/generation-quota` est fourni côté API.
 >
-> **Point critique** : chaque appel de génération **doit** envoyer le champ `language` = `AppState.langue.id`. Sans ça, le backend génère en français par défaut — bug silencieux côté UX.
+> **Point critique (MAJ 2026-11-17)** : la langue passée dans `language` dépend du **type de contenu généré** :
+> - **Quiz / Fiche / Flashcard / Carte mentale** : `language ∈ {fr, en}` = `AppState.langue.id`. Si l'utilisateur a une langue d'audio locale (bm/sus/ful) mais une langue de lecture fr, c'est bien `fr` qu'on envoie.
+> - **Podcast** : `language ∈ {fr, en, bm, sus, ful}` = `AppState.langueAudio.id`.
+> - Sans ça, le backend renvoie **400 `UNSUPPORTED_LANGUAGE`** pour les générateurs écrits + bm/sus/ful. L'UI doit **empêcher en amont** la sélection d'une langue invalide (ex. griser « Créer un quiz » quand `langue=bm`, ou ouvrir une bottom-sheet « Les quiz ne sont disponibles qu'en français et anglais, créez plutôt un podcast ! » avec CTA).
 
 ### Service
 - [ ] Créer `lib/Services/creation_api.dart` : `genererQuiz(source, options)`, `genererFiche(source, options)`, `genererPodcast(source, options)`. Gère upload multipart (PDF/DOCX/image) via `http`.
-- [ ] **Chaque méthode injecte systématiquement `language: AppState.langue.id` dans le body/form** — ne jamais laisser ce champ optionnel côté client, même si l'API le tolère.
+- [ ] **`genererQuiz` / `genererFiche` injectent `language = AppState.langue.id` (fr/en)**. **`genererPodcast` injecte `language = AppState.langueAudio.id` (5 langues)**. Ne jamais laisser ce champ optionnel côté client.
 - [ ] Polling via `GET /files/upload-status/:jobId` ou abonnement SSE `/api/notifications/stream` (préférer SSE si disponible).
 
 ### Source « Photo du cours » — multi-sélection + prévisualisation (gap actuel)
@@ -398,3 +420,5 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-16 | — | Correction : Wave désormais supporté par Flex Transfer → remis dans les moyens de paiement | — |
 | 2026-11-16 | P0 | **Phase 0 livrée** : `ApiUrl`, `ApiClient` + singleton, `AuthStorage`, `ApiException`, `DeviceInfo`, `PlatformFeaturesApi`, extension `AppState` (session + features), chargement au splash, 5 tests `ApiClient` verts. | — |
 | 2026-11-16 | P1 | **Phase 1 livrée côté mobile** : `MobileAuthApi` (6 méthodes), interceptor 401 → refresh → retry dans `ApiClient`, `AppState.tenterRafraichirSession()` + `deconnecter()` qui appelle logout backend, pages Auth branchées (inscription/connexion/code) avec EasyLoading + gestion erreurs + `USER_NOT_FOUND` snackbar, resend OTP avec timer 60s. 6 tests `MobileAuthApi` + 2 tests langue + 5 tests `ApiClient` = 13 verts. **Exécution réelle bloquée par l'API** (choix provider WhatsApp + endpoints à livrer). | — |
+| 2026-11-17 | — | Fix overflow `KlemiBoutonSecondaire` (ligne 98) : `Flexible` + `maxLines:1` + `ellipsis` + `mainAxisSize.min`. Déclencheur « Code établissement » sur iPhone 16 Pro. | — |
+| 2026-11-17 | P2 | **Phase 2 livrée côté mobile** : split langue de lecture (fr/en) / langue d'écoute (5 langues) dans `langues.dart` + `AppState` + `ApiClient` (nouveau header `x-language-audio`). Parsing JSON `FeedItem`/`QuizItem`/`FicheItem`/`PodcastItem` + factory `feedItemDepuisJson`. `MobileFeedApi` (fetchFeed/fetchOne/answerQuiz/like/save, 501 reconnu via `estBientotDisponible`). `FeedRepository extends ChangeNotifier` avec cache par tab, pagination curseur, invalidation sur changement langue, fallback mock via `ApiUrl.useMock`. `feed_page` refactorée (états chargement/erreur/vide, pull-to-refresh, scroll infini à 3 items, empty-state langue). `carte_quiz` optimiste avec `answerQuiz` + fallback offline, rail like/save → snackbar « Bientôt ». Tests : 8 `MobileFeedApi` + 4 `FeedRepository` + mise à jour langue → **27 verts**. **Rendu avec vraies données bloqué** par seed/déploiement dev. | — |

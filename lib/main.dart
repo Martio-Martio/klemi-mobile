@@ -19,6 +19,7 @@ void main() {
   final etat = AppState();
   final apiClient = ApiClient(
     resoudreLangue: () => etat.langue.id,
+    resoudreLangueAudio: () => etat.langueAudio.id,
     rafraichirSession: etat.tenterRafraichirSession,
   );
   ApiClient.brancher(apiClient);

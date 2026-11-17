@@ -33,7 +33,9 @@ void main() {
     await tester.pump();
     expect(find.text('Soso'), findsOneWidget);
     expect(find.text('Pular'), findsOneWidget);
-    expect(find.text('A daminɛ'), findsOneWidget); // bouton en bambara par défaut
+    // Phase 2 : la langue de lecture par défaut est fr (seules fr/en sont des
+    // langues de lecture valides). Le CTA affiche donc le libellé français.
+    expect(find.text('Commencer'), findsOneWidget);
   });
 
   testWidgets('Le feed affiche une carte quiz jouable', (tester) async {
@@ -89,7 +91,11 @@ void main() {
     await tester.tap(find.text('Pular'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(etat.langue.id, 'ful');
+    // Phase 2 : Pular n'est pas une langue de lecture — le choix est redirigé
+    // sur `langueAudio` par `AppState.choisirLangue` pour préserver l'intention.
+    // `langue` reste donc à sa valeur par défaut (fr) et `langueAudio` passe à ful.
+    expect(etat.langue.id, 'fr');
+    expect(etat.langueAudio.id, 'ful');
     expect(find.text('ouvrir'), findsOneWidget);
   });
 }

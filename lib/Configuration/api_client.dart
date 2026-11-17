@@ -7,10 +7,15 @@ import '../Services/auth_storage.dart';
 import '../Services/device_info.dart';
 import 'api_url.dart';
 
-/// Résout la langue courante au moment de la requête (lue depuis AppState
-/// par le binding dans main.dart). Séparé pour éviter la dépendance cyclique
+/// Résout la langue courante (de lecture, fr/en) au moment de la requête
+/// (lue depuis `AppState.langue`). Séparé pour éviter la dépendance cyclique
 /// `ApiClient ↔ AppState` et faciliter les tests unitaires.
 typedef ResolveurLangue = String Function();
+
+/// Résout la langue d'écoute courante (fr/en/bm/sus/ful) depuis
+/// `AppState.langueAudio`. Si null, le header `x-language-audio` n'est pas
+/// injecté — le backend retombe sur la langue de lecture.
+typedef ResolveurLangueAudio = String? Function();
 
 /// Résout le token d'accès courant. Nullable si l'utilisateur n'est pas
 /// connecté (endpoints publics, ping health, platform/features…).
@@ -32,6 +37,7 @@ typedef RafraichirSession = Future<bool> Function();
 class ApiClient {
   final String baseUrl;
   final ResolveurLangue resoudreLangue;
+  final ResolveurLangueAudio? resoudreLangueAudio;
   final ResolveurToken resoudreToken;
   RafraichirSession? rafraichirSession;
   final http.Client _client;
@@ -50,6 +56,7 @@ class ApiClient {
   ApiClient({
     String? baseUrl,
     required this.resoudreLangue,
+    this.resoudreLangueAudio,
     ResolveurToken? resoudreToken,
     this.rafraichirSession,
     http.Client? client,
@@ -76,6 +83,7 @@ class ApiClient {
 
   Future<Map<String, String>> _entetes({Map<String, String>? extra, bool jsonBody = true}) async {
     final token = await resoudreToken();
+    final langAudio = resoudreLangueAudio?.call();
     return {
       if (jsonBody) 'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -83,6 +91,7 @@ class ApiClient {
       'x-device-name': DeviceInfo.deviceName(),
       'x-platform': DeviceInfo.platform(),
       'x-language': resoudreLangue(),
+      if (langAudio != null && langAudio.isNotEmpty) 'x-language-audio': langAudio,
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
       ...?extra,
     };

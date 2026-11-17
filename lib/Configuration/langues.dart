@@ -54,3 +54,25 @@ const List<Langue> languesDisponibles = [
 ];
 
 const List<String> languesBientot = ['Wolof', 'Hausa', 'Dioula'];
+
+/// Langues dans lesquelles le backend sait **générer du texte** (quiz, fiches,
+/// flashcards, cartes mentales). Les langues locales (bm/sus/ful) sont
+/// réservées à l'audio parce qu'elles sont rarement lues couramment par les
+/// scolarisés francophones — produire du texte dedans serait un mur de
+/// lecture.
+const List<String> _idsLangueLecture = ['fr', 'en'];
+
+List<Langue> get languesLecture =>
+    languesDisponibles.where((l) => _idsLangueLecture.contains(l.id)).toList();
+
+bool estLangueLecture(Langue l) => _idsLangueLecture.contains(l.id);
+
+/// Toutes les langues sont acceptées pour les podcasts (générés via TTS +
+/// transcript affiché avec `fontFamilyFallback: AppTheme.famillesSecours`).
+List<Langue> get languesAudio => languesDisponibles;
+
+/// Défauts de session utilisés quand aucune préférence n'a été persistée.
+Langue get langueLectureParDefaut =>
+    languesDisponibles.firstWhere((l) => l.id == 'fr');
+Langue get langueAudioParDefaut =>
+    languesDisponibles.firstWhere((l) => l.id == 'bm');

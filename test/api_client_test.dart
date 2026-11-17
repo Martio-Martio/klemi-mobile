@@ -37,6 +37,41 @@ void main() {
       expect(requeteCapturee.headers['Authorization'], 'Bearer token-123');
     });
 
+    test('injecte x-language-audio quand le résolveur est fourni', () async {
+      late http.Request requeteCapturee;
+      final mock = MockClient((req) async {
+        requeteCapturee = req;
+        return http.Response('{}', 200);
+      });
+      final client = ApiClient(
+        baseUrl: 'https://exemple.test/api',
+        resoudreLangue: () => 'fr',
+        resoudreLangueAudio: () => 'bm',
+        resoudreToken: () async => null,
+        client: mock,
+      );
+      await client.get('/mobile/feed');
+      expect(requeteCapturee.headers['x-language'], 'fr');
+      expect(requeteCapturee.headers['x-language-audio'], 'bm');
+    });
+
+    test('n\'injecte pas x-language-audio quand le résolveur retourne null', () async {
+      late http.Request requeteCapturee;
+      final mock = MockClient((req) async {
+        requeteCapturee = req;
+        return http.Response('{}', 200);
+      });
+      final client = ApiClient(
+        baseUrl: 'https://exemple.test/api',
+        resoudreLangue: () => 'fr',
+        resoudreLangueAudio: () => null,
+        resoudreToken: () async => null,
+        client: mock,
+      );
+      await client.get('/ping');
+      expect(requeteCapturee.headers.containsKey('x-language-audio'), isFalse);
+    });
+
     test('n\'injecte pas Authorization quand le token est null', () async {
       late http.Request requeteCapturee;
       final mock = MockClient((req) async {

@@ -11,9 +11,18 @@ import '../Services/mobile_auth_api.dart';
 /// À brancher sur l'API : les valeurs sont initialisées en local pour la démo.
 class AppState extends ChangeNotifier {
   static const _cleLangue = 'langue';
+  static const _cleLangueAudio = 'langueAudio';
   static const _cleConnecte = 'connecte';
 
-  Langue _langue = languesDisponibles[2]; // Bamanankan par défaut (démo)
+  /// Langue de **lecture** — gouverne les contenus écrits (quiz, fiches,
+  /// flashcards, cartes mentales). Restreinte à `{fr, en}` : le backend ne
+  /// génère pas de texte en langue locale (voir plan Phase 3).
+  Langue _langue = langueLectureParDefaut;
+
+  /// Langue d'**écoute** — gouverne les podcasts. Peut valoir n'importe
+  /// quelle langue de [languesAudio], y compris les langues locales.
+  Langue _langueAudio = langueAudioParDefaut;
+
   bool _connecte = false;
 
   /// Token JWT courant, en mémoire uniquement. La persistance sécurisée est
@@ -56,6 +65,7 @@ class AppState extends ChangeNotifier {
   List<String>? _matieresPerso; // null = liste par défaut du niveau
 
   Langue get langue => _langue;
+  Langue get langueAudio => _langueAudio;
   bool get connecte => _connecte;
   String? get accessToken => _accessToken;
   /// Niveau d'études (collège, lycée…). Distinct de [niveau], le palier de progression.
@@ -179,9 +189,23 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final id = prefs.getString(_cleLangue);
     if (id != null) {
-      _langue = languesDisponibles.firstWhere(
+      final trouve = languesDisponibles.firstWhere(
         (l) => l.id == id,
         orElse: () => _langue,
+      );
+      // Un ancien build pouvait avoir persisté une langue locale en langue
+      // de lecture : on la remet en langue audio pour ne pas perdre la préf.
+      if (estLangueLecture(trouve)) {
+        _langue = trouve;
+      } else {
+        _langueAudio = trouve;
+      }
+    }
+    final idAudio = prefs.getString(_cleLangueAudio);
+    if (idAudio != null) {
+      _langueAudio = languesDisponibles.firstWhere(
+        (l) => l.id == idAudio,
+        orElse: () => _langueAudio,
       );
     }
     _connecte = prefs.getBool(_cleConnecte) ?? false;
@@ -202,11 +226,26 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fixe la langue de **lecture** (quiz/fiche). Si [langue] n'est pas une
+  /// langue de lecture valide (fr/en), on la redirige vers [choisirLangueAudio]
+  /// pour préserver l'intention utilisateur.
   Future<void> choisirLangue(Langue langue) async {
+    if (!estLangueLecture(langue)) {
+      return choisirLangueAudio(langue);
+    }
     _langue = langue;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_cleLangue, langue.id);
+  }
+
+  /// Fixe la langue d'**écoute** (podcast). Accepte les 5 langues de
+  /// [languesAudio].
+  Future<void> choisirLangueAudio(Langue langue) async {
+    _langueAudio = langue;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cleLangueAudio, langue.id);
   }
 
   Future<void> marquerConnecte(bool valeur) async {
