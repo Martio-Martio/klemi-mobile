@@ -70,9 +70,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Client OAuth iOS public (GIDClientID + schéma REVERSED_CLIENT_ID). -->
+	<!-- Client OAuth iOS public (GIDClientID + schéma REVERSED_CLIENT_ID), bundle com.klemi.app. -->
 	<key>GIDClientID</key>
-	<string>675120824090-vvmm60c16f11lflmqolfbvrgianrn96p.apps.googleusercontent.com</string>
+	<string>276989028193-bhf2v7ka3iq9rsi9f4mnopsan72ar884.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -80,7 +80,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.675120824090-vvmm60c16f11lflmqolfbvrgianrn96p</string>
+				<string>com.googleusercontent.apps.276989028193-bhf2v7ka3iq9rsi9f4mnopsan72ar884</string>
 			</array>
 		</dict>
 	</array>
