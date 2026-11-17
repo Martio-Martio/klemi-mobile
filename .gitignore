@@ -51,3 +51,6 @@ GoogleService-Info.plist
 ios/Runner/GoogleService-Info.plist
 firebase_options.dart
 firebase-service-account*.json
+# Téléchargements console OAuth à la racine (le JSON ne doit jamais être versionné)
+/client_secret_*.json
+/client_*.plist

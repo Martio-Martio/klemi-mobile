@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Client OAuth Web, audience serveur de l'idToken (GOOGLE_CLIENT_ID).
+      Public : ce n'est pas un secret. google_sign_in le lit comme serverClientId.
+      Le JSON téléchargé est de type "installed", pas "web" : il ne peut pas
+      servir de serverClientId.
+    -->
+    <string name="default_web_client_id" translatable="false">276989028193-aen39j43o3hiug271eorbr5mkosucsa3.apps.googleusercontent.com</string>
+</resources>

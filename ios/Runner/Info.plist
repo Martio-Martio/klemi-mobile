@@ -70,5 +70,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Client OAuth iOS public (GIDClientID + schéma REVERSED_CLIENT_ID). -->
+	<key>GIDClientID</key>
+	<string>675120824090-vvmm60c16f11lflmqolfbvrgianrn96p.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.675120824090-vvmm60c16f11lflmqolfbvrgianrn96p</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
