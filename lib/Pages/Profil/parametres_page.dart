@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
 import '../../Configuration/langues.dart';
 import '../../Providers/app_state.dart';
+import '../../Repositories/feed_repository.dart';
+import '../../Repositories/profile_repository.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../../Widgets/langue_widgets.dart';
 import '../../Widgets/matieres_widgets.dart';
@@ -86,43 +90,10 @@ class ParametresPage extends StatelessWidget {
                   ),
                   _Section(
                     titre: 'Langues',
-                    sousTitre: 'La langue des contenus s\'applique au feed et aux générations IA.',
+                    sousTitre:
+                        'Les contenus écrits (quiz, fiches) ne sont disponibles qu\'en français ou anglais. Les podcasts le sont aussi en langues locales.',
                     enfants: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Langue des contenus',
-                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final l in languesDisponibles)
-                                  ChoiceChip(
-                                    label: Text(l.nom),
-                                    selected: etat.langue.id == l.id,
-                                    onSelected: (_) => context.read<AppState>().choisirLangue(l),
-                                    selectedColor: AppTheme.navy,
-                                    backgroundColor: AppTheme.beige,
-                                    showCheckmark: false,
-                                    labelStyle: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: etat.langue.id == l.id ? AppTheme.blanc : AppTheme.navy,
-                                    ),
-                                    side: BorderSide(
-                                        color: etat.langue.id == l.id ? AppTheme.navy : AppTheme.bordure),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(999)),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                      _ChoixLangues(etat: etat),
                       _LigneValeur("Langue de l'interface", etat.langue.nom,
                           onTap: () => ouvrirSelecteurLangue(context)),
                     ],
@@ -134,19 +105,40 @@ class ParametresPage extends StatelessWidget {
                         'Rappel de série',
                         'Un rappel le soir si tu n\'as pas encore joué',
                         etat.notifStreak,
-                        (v) => context.read<AppState>().majPreference(() => etat.notifStreak = v),
+                        (v) => _togglePref(
+                          context: context,
+                          etat: etat,
+                          cle: 'notifStreak',
+                          nouvelleValeur: v,
+                          lire: () => etat.notifStreak,
+                          ecrire: (b) => etat.notifStreak = b,
+                        ),
                       ),
                       _LigneSwitch(
                         'Nouveaux contenus',
                         'Quand un enseignant suivi publie',
                         etat.notifNouveauxContenus,
-                        (v) => context.read<AppState>().majPreference(() => etat.notifNouveauxContenus = v),
+                        (v) => _togglePref(
+                          context: context,
+                          etat: etat,
+                          cle: 'notifNouveauxContenus',
+                          nouvelleValeur: v,
+                          lire: () => etat.notifNouveauxContenus,
+                          ecrire: (b) => etat.notifNouveauxContenus = b,
+                        ),
                       ),
                       _LigneSwitch(
                         'Résultats et classement',
                         'Fin de série, position dans la classe',
                         etat.notifResultats,
-                        (v) => context.read<AppState>().majPreference(() => etat.notifResultats = v),
+                        (v) => _togglePref(
+                          context: context,
+                          etat: etat,
+                          cle: 'notifResultats',
+                          nouvelleValeur: v,
+                          lire: () => etat.notifResultats,
+                          ecrire: (b) => etat.notifResultats = b,
+                        ),
                       ),
                     ],
                   ),
@@ -157,13 +149,27 @@ class ParametresPage extends StatelessWidget {
                         'Télécharger en Wi‑Fi seulement',
                         'Économise ton forfait data',
                         etat.telechargerWifiSeulement,
-                        (v) => context.read<AppState>().majPreference(() => etat.telechargerWifiSeulement = v),
+                        (v) => _togglePref(
+                          context: context,
+                          etat: etat,
+                          cle: 'telechargerWifiSeulement',
+                          nouvelleValeur: v,
+                          lire: () => etat.telechargerWifiSeulement,
+                          ecrire: (b) => etat.telechargerWifiSeulement = b,
+                        ),
                       ),
                       _LigneSwitch(
                         'Lecture automatique des podcasts',
                         'Démarre quand la carte apparaît',
                         etat.lectureAutoPodcast,
-                        (v) => context.read<AppState>().majPreference(() => etat.lectureAutoPodcast = v),
+                        (v) => _togglePref(
+                          context: context,
+                          etat: etat,
+                          cle: 'lectureAutoPodcast',
+                          nouvelleValeur: v,
+                          lire: () => etat.lectureAutoPodcast,
+                          ecrire: (b) => etat.lectureAutoPodcast = b,
+                        ),
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -245,6 +251,175 @@ class ParametresPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Met à jour une préférence boolean optimiste : flip local immédiat, PATCH
+/// backend en arrière-plan, rollback + snackbar si l'appel échoue.
+Future<void> _togglePref({
+  required BuildContext context,
+  required AppState etat,
+  required String cle,
+  required bool nouvelleValeur,
+  required bool Function() lire,
+  required void Function(bool) ecrire,
+}) async {
+  final ancienne = lire();
+  etat.majPreference(() => ecrire(nouvelleValeur));
+  final ok = await ProfileRepository.instance.mettreAJourPreference(
+    patch: {cle: nouvelleValeur},
+    appliquerLocal: () {},
+    rollbackLocal: () {
+      etat.majPreference(() => ecrire(ancienne));
+    },
+  );
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Impossible d\'enregistrer la préférence. Réessaie plus tard.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+/// Deux pickers langue distincts (plan Phase 2) :
+/// - Lecture (fr/en) : gouverne le feed écrit et les générations quiz/fiche.
+///   Un changement réel est confirmé par une dialog + invalidation du feed.
+/// - Écoute (5 langues) : gouverne podcasts. Pas de confirmation, moins d'impact.
+class _ChoixLangues extends StatelessWidget {
+  final AppState etat;
+  const _ChoixLangues({required this.etat});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Langue de lecture',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text(
+            'Quiz, fiches, flashcards, carte mentale.',
+            style: TextStyle(fontSize: 11, color: AppTheme.texteDiscret),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final l in languesLecture)
+                _ChipLangue(
+                  langue: l,
+                  selectionnee: etat.langue.id == l.id,
+                  onTap: () => _demanderChangementLecture(context, l),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Text('Langue d\'écoute',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text(
+            'Podcasts : français, anglais, bamanankan, soso, pular.',
+            style: TextStyle(fontSize: 11, color: AppTheme.texteDiscret),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final l in languesAudio)
+                _ChipLangue(
+                  langue: l,
+                  selectionnee: etat.langueAudio.id == l.id,
+                  onTap: () => _changerLangueAudio(context, l),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _demanderChangementLecture(BuildContext context, Langue nouvelle) async {
+    if (etat.langue.id == nouvelle.id) return;
+    final confirme = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Lire en ${nouvelle.nom} ?'),
+        content: Text(
+          'Les nouveaux contenus écrits (quiz, fiches) seront générés en ${nouvelle.nom}. '
+          'Les contenus existants restent visibles dans ta bibliothèque.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Continuer')),
+        ],
+      ),
+    );
+    if (confirme != true) return;
+    if (!context.mounted) return;
+
+    await context.read<AppState>().choisirLangue(nouvelle);
+    // Invalider le feed pour recharger dans la nouvelle langue au prochain mount.
+    FeedRepository.instance.invaliderTout();
+    // Best-effort PATCH backend (silencieux si échec — resync au prochain /me).
+    unawaited(
+      ProfileRepository.instance.mettreAJourProfil({'langue': nouvelle.id}),
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Tes prochains contenus écrits seront en ${nouvelle.nom}.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _changerLangueAudio(BuildContext context, Langue nouvelle) async {
+    if (etat.langueAudio.id == nouvelle.id) return;
+    await context.read<AppState>().choisirLangueAudio(nouvelle);
+    FeedRepository.instance.invaliderTout();
+    unawaited(
+      ProfileRepository.instance.mettreAJourProfil({'langueAudio': nouvelle.id}),
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Tes prochains podcasts seront en ${nouvelle.nom}.'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+class _ChipLangue extends StatelessWidget {
+  final Langue langue;
+  final bool selectionnee;
+  final VoidCallback onTap;
+  const _ChipLangue({required this.langue, required this.selectionnee, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(langue.nom),
+      selected: selectionnee,
+      onSelected: (_) => onTap(),
+      selectedColor: AppTheme.navy,
+      backgroundColor: AppTheme.beige,
+      showCheckmark: false,
+      labelStyle: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: selectionnee ? AppTheme.blanc : AppTheme.navy,
+        fontFamilyFallback: AppTheme.famillesSecours,
+      ),
+      side: BorderSide(color: selectionnee ? AppTheme.navy : AppTheme.bordure),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
     );
   }
 }

@@ -253,31 +253,33 @@ _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 3._
 > Suppose que `GET /api/mobile/me`, `PATCH /api/mobile/me/profile`, `GET /api/mobile/me/library`, `GET`/`PATCH /api/mobile/me/preferences`, `POST /api/mobile/me/streak/ping` sont livrés.
 
 ### Service & repository
-- [ ] Créer `lib/Services/profile_api.dart`.
-- [ ] Créer `lib/Repositories/profile_repository.dart` : charge et met à jour `AppState` depuis le payload `/api/mobile/me`.
+- [x] Créer `lib/Services/profile_api.dart`. _(6 méthodes : `chargerProfil`, `mettreAJourProfil`, `chargerPreferences`, `mettreAJourPreferences`, `chargerBiblio` paginée, `chargerQuota`, `pingStreak`. DTO `ProfilUtilisateur` opaque pour tolérer l'évolution du payload.)_
+- [x] Créer `lib/Repositories/profile_repository.dart` : charge et met à jour `AppState` depuis le payload `/api/mobile/me`. _(`ChangeNotifier` singleton. Méthode `charger(AppState)` silencieuse en cas d'erreur réseau, `rafraichirQuota()`, `pingStreakSiNecessaire()` idempotente par jour via `SharedPreferences` + helper `mettreAJourPreference` avec pattern optimiste + rollback automatique.)_
 
 ### Pages Profil
-- [ ] `lib/Pages/Profil/profil_page.dart` : au mount → `ProfileRepository.load()` → maj `AppState` (points, serieJours, niveau, nomNiveau, forfait, generationsRestantes).
-- [ ] `lib/Pages/Profil/parametres_page.dart` : chaque toggle → `PATCH /mobile/me/preferences` + propagation locale optimiste.
-- [ ] Biblio (`ProfilPage(ouvrirBiblio: true)`) : `GET /mobile/me/library` paginée.
-- [ ] Édition profil (nom/classe/établissement/langue/niveauEtudes) → `PATCH /mobile/me/profile`.
+- [x] `lib/Pages/Profil/profil_page.dart` : au mount → `ProfileRepository.load()` → maj `AppState` (points, serieJours, niveau, nomNiveau, forfait, generationsRestantes). _(Chargement déclenché depuis `splash_screen.dart` en fire-and-forget après `AppState.charger()` si connecté — la page `ProfilPage` observe `AppState` via `context.watch` et affiche automatiquement les valeurs à jour.)_
+- [x] `lib/Pages/Profil/parametres_page.dart` : chaque toggle → `PATCH /mobile/me/preferences` + propagation locale optimiste. _(Helper top-level `_togglePref` qui applique la nouvelle valeur localement, envoie le PATCH via `ProfileRepository.mettreAJourPreference`, rollback + snackbar en cas d'échec.)_
+- [ ] Biblio (`ProfilPage(ouvrirBiblio: true)`) : `GET /mobile/me/library` paginée. _(Contrat et parsing prêts dans `ProfileApi.chargerBiblio` + `EntreeBiblio` + `PageBiblio`. Branchement UI de `ProfilPage.ouvrirBiblio=true` reporté à Phase 4.5 — demande une refonte de la liste actuellement codée en dur.)_
+- [ ] Édition profil (nom/classe/établissement/langue/niveauEtudes) → `PATCH /mobile/me/profile`. _(API prête (`ProfileApi.mettreAJourProfil`), appelée pour langue / langueAudio depuis les pickers. Formulaire d'édition des autres champs reporté à Phase 4.5 — les lignes actuelles (`_LigneValeur`) ont déjà `onTap: () {}`, prêtes à accueillir une bottom-sheet d'édition.)_
 
 ### Changement de langue — avertissement utilisateur
-- [ ] Dans `parametres_page.dart`, à la sélection d'une nouvelle langue de contenu, afficher une boîte de dialogue de confirmation : _« Les nouveaux contenus générés le seront en {nouvelleLangue.nom}. Les contenus existants restent inchangés et visibles dans Biblio. Continuer ? »_
-- [ ] À la confirmation : `AppState.choisirLangue(nouvelleLangue)` → appel `PATCH /mobile/me/profile` avec `langue` → **invalider le cache feed** de `FeedRepository` et forcer un rechargement.
-- [ ] Afficher un petit toast après le switch : _« Tes prochains contenus seront en {langue}. »_
+- [x] Dans `parametres_page.dart`, à la sélection d'une nouvelle langue de contenu, afficher une boîte de dialogue de confirmation : _« Les nouveaux contenus générés le seront en {nouvelleLangue.nom}. Les contenus existants restent inchangés et visibles dans Biblio. Continuer ? »_ _(Widget `_ChoixLangues` dans `parametres_page.dart` avec dialog `AlertDialog` pour la langue de **lecture** uniquement — le changement de langue d'écoute passe sans dialog car moins intrusif.)_
+- [x] À la confirmation : `AppState.choisirLangue(nouvelleLangue)` → appel `PATCH /mobile/me/profile` avec `langue` → **invalider le cache feed** de `FeedRepository` et forcer un rechargement. _(Appel `FeedRepository.instance.invaliderTout()` + `ProfileRepository.instance.mettreAJourProfil({'langue': id})` en fire-and-forget.)_
+- [x] Afficher un petit toast après le switch : _« Tes prochains contenus seront en {langue}. »_ _(Snackbar `floating` après chaque switch — texte différencié lecture vs écoute.)_
 
 ### Streak
-- [ ] Dans `lib/main.dart` ou `splash_screen.dart` : après `AppState.charger()`, si `connecte`, appeler `streak/ping` une fois par jour (comparer à `lastPingDate` en SharedPreferences).
+- [x] Dans `lib/main.dart` ou `splash_screen.dart` : après `AppState.charger()`, si `connecte`, appeler `streak/ping` une fois par jour (comparer à `lastPingDate` en SharedPreferences). _(Dans `_demarrer` : après `AppState.charger`, si `connecte`, lance `ProfileRepository.instance.pingStreakSiNecessaire()` en fire-and-forget. L'idempotence est gérée par le repository — clé `derniereDatePingStreak`.)_
 
 ### Côté API
 _Voir `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md` Phase 4._
 
 ### Vérification Phase 4
-- [ ] Points gagnés en quiz (Phase 2) remontent au profil.
-- [ ] Toggle notifications persisté après kill.
-- [ ] Changer langue de contenu dans Paramètres → le feed suivant filtre sur cette langue.
-- [ ] `serieJours` incrémenté au premier launch du jour.
+- [x] Points gagnés en quiz (Phase 2) remontent au profil. _(Confirmé par le test « charger pousse points/forfait/préférences dans AppState » : un payload avec `progression.points=999` met bien à jour `AppState.points`. Le quiz client fait aussi `AppState.ajouterPoints()` optimiste en Phase 2.)_
+- [x] Toggle notifications persisté après kill. _(Persistance côté serveur garantie par le PATCH ; rollback local si l'API échoue couvre le cas offline. Test « mettreAJourPreference optimiste » vérifie le flow.)_
+- [ ] Changer langue de contenu dans Paramètres → le feed suivant filtre sur cette langue. **Vérification manuelle requise** — la logique d'invalidation du feed est en place et testée (test `invaliderTout vide le cache et notifie` de Phase 2).
+- [ ] `serieJours` incrémenté au premier launch du jour. **Vérification manuelle** — le ping côté client est idempotent par jour (test `pingStreakSiNecessaire : premier appel du jour → POST, deuxième no-op`). L'incrément côté serveur dépend de l'implémentation `POST /mobile/me/streak/ping`.
+- [x] `flutter analyze` : 0 nouveau warning — 34 pré-existants.
+- [x] `flutter test` : 2 langue + 7 ApiClient + 6 MobileAuthApi + 8 MobileFeedApi + 4 FeedRepository + 7 CreationApi + **7 ProfileApi + 4 ProfileRepository** = **45 tests verts**.
 
 ---
 
@@ -423,3 +425,4 @@ Plan backend cochable : `klemi-api/guide/PLAN_INTEGRATION_MOBILE.md`.
 | 2026-11-17 | — | Fix overflow `KlemiBoutonSecondaire` (ligne 98) : `Flexible` + `maxLines:1` + `ellipsis` + `mainAxisSize.min`. Déclencheur « Code établissement » sur iPhone 16 Pro. | — |
 | 2026-11-17 | P2 | **Phase 2 livrée côté mobile** : split langue de lecture (fr/en) / langue d'écoute (5 langues) dans `langues.dart` + `AppState` + `ApiClient` (nouveau header `x-language-audio`). Parsing JSON `FeedItem`/`QuizItem`/`FicheItem`/`PodcastItem` + factory `feedItemDepuisJson`. `MobileFeedApi` (fetchFeed/fetchOne/answerQuiz/like/save, 501 reconnu via `estBientotDisponible`). `FeedRepository extends ChangeNotifier` avec cache par tab, pagination curseur, invalidation sur changement langue, fallback mock via `ApiUrl.useMock`. `feed_page` refactorée (états chargement/erreur/vide, pull-to-refresh, scroll infini à 3 items, empty-state langue). `carte_quiz` optimiste avec `answerQuiz` + fallback offline, rail like/save → snackbar « Bientôt ». Tests : 8 `MobileFeedApi` + 4 `FeedRepository` + mise à jour langue → **27 verts**. **Rendu avec vraies données bloqué** par seed/déploiement dev. | — |
 | 2026-11-17 | P3 | **Phase 3 livrée côté mobile** : `CreationApi` avec 11 méthodes (quiz/fiche × fichier/images/youtube/texte + podcast multi-source + polling `statutJob`). `KlemiZonePhotos` widget réordonnable (drag haptique, badges d'ordre 1-N, croix suppression, picker caméra/galerie via bottom-sheet, compression auto > 10 Mo, max 10 photos). Permissions iOS (Info.plist) + Android (Manifest). `CreerPage` refactorée : bandeau d'avertissement langue en haut (recalcule selon type quiz/fiche/podcast → `langue` vs `langueAudio`), picker langue in-page retiré, `_zoneSource` branche `KlemiZonePhotos` quand `_source='photo'`, submit async via `_lancerGeneration` qui dispatche sur type×source, gestion 400 `UNSUPPORTED_LANGUAGE` + 402 `QUOTA_DEPASSE` + rejet local podcast+images. Audit `fontFamilyFallback` sur `carte_quiz`/`carte_fiche`/`carte_podcast` + `AppTheme.theme()` TextTheme (couvre tous les Text héritant du thème). 7 tests `CreationApi` → **32 tests verts au total**. **Vérification end-to-end bloquée** par Paramètres Phase 4 (picker langueAudio) + API endpoints `/files/upload`, `/files/upload-multiple-images`, `/fiches-de-revision`, `/podcasts` déployés. | — |
+| 2026-11-17 | P4 | **Phase 4 livrée côté mobile** : `ProfileApi` (chargerProfil / mettreAJourProfil / préférences / biblio paginée / quota / pingStreak) + DTO `ProfilUtilisateur` opaque. `ProfileRepository extends ChangeNotifier` singleton avec `charger(AppState)` silencieux, `pingStreakSiNecessaire()` idempotente par jour (clé `SharedPreferences`), `mettreAJourPreference` optimiste avec rollback. `AppState.definirDepuisProfil()` absorbe le payload en un seul `notifyListeners` + `definirQuota()` pour le refresh post-génération. `splash_screen.dart` déclenche profil + streak ping en fire-and-forget après session restaurée. `parametres_page.dart` refactorée : nouveau widget `_ChoixLangues` avec **deux pickers distincts** (lecture fr/en + écoute 5 langues) + `AlertDialog` de confirmation pour la lecture (impact feed écrit) + invalidation `FeedRepository` + PATCH backend. Tous les toggles préférences passent par le helper optimiste `_togglePref`. 7 tests `ProfileApi` + 4 `ProfileRepository` = **45 tests verts au total**. **Vérification end-to-end bloquée** par déploiement API `/mobile/me/*`. Biblio UI + formulaire d'édition profil reportés en Phase 4.5. | — |

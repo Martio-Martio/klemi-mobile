@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import 'Configuration/app_theme.dart';
 import 'Pages/Auth/connexion_page.dart';
 import 'Pages/app_shell.dart';
 import 'Providers/app_state.dart';
+import 'Repositories/profile_repository.dart';
 import 'Services/platform_features_api.dart';
 
 /// Écran de démarrage : charge la session locale puis ouvre l'app native
@@ -35,6 +38,15 @@ class _SplashScreenState extends State<SplashScreen> {
       Future.delayed(const Duration(milliseconds: 1600)),
     ]);
     if (!mounted) return;
+    // Phase 4 : si session restaurée, charger le profil (points, forfait,
+    // préférences) et pinger le streak (incrément quotidien). Les deux
+    // appels sont silencieux en cas d'erreur réseau — l'app démarre quand
+    // même avec les valeurs locales.
+    if (etat.connecte) {
+      // Fire-and-forget : on ne bloque pas la navigation.
+      unawaited(ProfileRepository.instance.charger(etat));
+      unawaited(ProfileRepository.instance.pingStreakSiNecessaire());
+    }
     final Widget suivant = etat.connecte ? const AppShell() : const ConnexionPage();
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(

@@ -6,6 +6,7 @@ import '../Configuration/matieres.dart';
 import '../Services/api_exception.dart';
 import '../Services/auth_storage.dart';
 import '../Services/mobile_auth_api.dart';
+import '../Services/profile_api.dart';
 
 /// État de session côté app (langue, progression, forfait).
 /// À brancher sur l'API : les valeurs sont initialisées en local pour la démo.
@@ -182,6 +183,81 @@ class AppState extends ChangeNotifier {
   /// Met à jour le catalogue de features exposé par le backend.
   void definirFeatures(Map<String, dynamic> nouvelles) {
     features = Map.unmodifiable(nouvelles);
+    notifyListeners();
+  }
+
+  /// Absorbe le payload `GET /api/mobile/me` en un seul `notifyListeners`
+  /// — évite N rebuilds pendant le chargement initial du profil (Phase 4).
+  /// Les champs absents du payload préservent leur valeur courante.
+  void definirDepuisProfil(ProfilUtilisateur p) {
+    final profil = p.profil;
+    final progression = p.progression;
+    final forfait = p.forfait;
+    final prefs = p.preferences;
+
+    // Profil
+    final idLangue = profil['langue'] as String?;
+    if (idLangue != null) {
+      final trouve = languesDisponibles.firstWhere(
+        (l) => l.id == idLangue,
+        orElse: () => _langue,
+      );
+      if (estLangueLecture(trouve)) _langue = trouve;
+    }
+    final idAudio = profil['langueAudio'] as String?;
+    if (idAudio != null) {
+      _langueAudio = languesDisponibles.firstWhere(
+        (l) => l.id == idAudio,
+        orElse: () => _langueAudio,
+      );
+    }
+    final niveau = profil['niveauEtudes'] as String?;
+    if (niveau != null) {
+      _niveau = NiveauEtudes.values.firstWhere(
+        (n) => n.name == niveau,
+        orElse: () => _niveau,
+      );
+    }
+    final c = profil['classe'];
+    if (c is String && c.isNotEmpty) classe = c;
+    final e = profil['etablissement'];
+    if (e is String && e.isNotEmpty) etablissement = e;
+
+    // Progression
+    points = (progression['points'] as num?)?.toInt() ?? points;
+    serieJours = (progression['serieJours'] as num?)?.toInt() ?? serieJours;
+    this.niveau = (progression['niveau'] as num?)?.toInt() ?? this.niveau;
+    nomNiveau = progression['nomNiveau'] as String? ?? nomNiveau;
+    pointsNiveauSuivant =
+        (progression['pointsNiveauSuivant'] as num?)?.toInt() ?? pointsNiveauSuivant;
+    bonnesReponsesSerie =
+        (progression['bonnesReponsesSerie'] as num?)?.toInt() ?? bonnesReponsesSerie;
+    questionsSerie =
+        (progression['questionsSerie'] as num?)?.toInt() ?? questionsSerie;
+
+    // Forfait
+    final nomForfait = forfait['nom'] as String?;
+    if (nomForfait != null && nomForfait.isNotEmpty) this.forfait = nomForfait;
+    generationsRestantes =
+        (forfait['generationsRestantes'] as num?)?.toInt() ?? generationsRestantes;
+
+    // Préférences
+    notifStreak = prefs['notifStreak'] as bool? ?? notifStreak;
+    notifNouveauxContenus = prefs['notifNouveauxContenus'] as bool? ?? notifNouveauxContenus;
+    notifResultats = prefs['notifResultats'] as bool? ?? notifResultats;
+    telechargerWifiSeulement =
+        prefs['telechargerWifiSeulement'] as bool? ?? telechargerWifiSeulement;
+    lectureAutoPodcast = prefs['lectureAutoPodcast'] as bool? ?? lectureAutoPodcast;
+    stockageHorsLigneMo =
+        (prefs['stockageHorsLigneMo'] as num?)?.toInt() ?? stockageHorsLigneMo;
+
+    notifyListeners();
+  }
+
+  /// Met à jour le quota IA restant seulement (endpoint dédié Phase 3/4).
+  void definirQuota(QuotaGeneration q) {
+    generationsRestantes = q.restantes;
+    if (q.forfait.isNotEmpty) forfait = q.forfait;
     notifyListeners();
   }
 
