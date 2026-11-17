@@ -110,6 +110,59 @@ void main() {
     );
   });
 
+  test('connexionGoogle envoie l\'idToken et parse accessToken, refreshToken et user', () async {
+    late http.Request requete;
+    final mock = MockClient((req) async {
+      requete = req;
+      return http.Response(
+        jsonEncode({
+          'accessToken': 'at-g',
+          'refreshToken': 'rt-g',
+          'user': {'id': 'u-g', 'nom': 'Awa', 'role': 'STUDENT'},
+        }),
+        200,
+      );
+    });
+    final api = MobileAuthApi(ApiClient(
+      baseUrl: 'https://exemple.test/api',
+      resoudreLangue: () => 'fr',
+      resoudreToken: () async => null,
+      client: mock,
+    ));
+
+    final session = await api.connexionGoogle('id-token-google');
+
+    expect(requete.url.path, '/api/mobile-auth/google');
+    final body = jsonDecode(requete.body) as Map<String, dynamic>;
+    expect(body['idToken'], 'id-token-google');
+    expect(session.accessToken, 'at-g');
+    expect(session.refreshToken, 'rt-g');
+    expect(session.user?['nom'], 'Awa');
+    expect(session.user?['role'], 'STUDENT');
+  });
+
+  test('connexionGoogle propage un jeton refusé', () async {
+    final client = clientAvecReponses([
+      {
+        'status': 401,
+        'body': {
+          'statusCode': 401,
+          'message': 'Jeton Google invalide ou expiré.',
+          'code': 'GOOGLE_TOKEN_INVALID',
+        },
+      },
+    ]);
+    final api = MobileAuthApi(client);
+
+    await expectLater(
+      () => api.connexionGoogle('mauvais'),
+      throwsA(isA<ApiException>()
+          .having((e) => e.statusCode, 'statusCode', 401)
+          .having((e) => e.code, 'code', 'GOOGLE_TOKEN_INVALID')
+          .having((e) => e.message, 'message', 'Jeton Google invalide ou expiré.')),
+    );
+  });
+
   test('verifyOtp parse accessToken, refreshToken et user', () async {
     final client = clientAvecReponses([
       {

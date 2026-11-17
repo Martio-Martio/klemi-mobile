@@ -51,6 +51,7 @@ class ApiClient {
     '/mobile-auth/verify-otp',
     '/mobile-auth/resend-otp',
     '/mobile-auth/refresh',
+    '/mobile-auth/google',
   };
 
   ApiClient({

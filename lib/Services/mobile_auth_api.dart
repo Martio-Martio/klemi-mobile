@@ -65,6 +65,15 @@ class MobileAuthApi {
     return MobileAuthDemarrage(tempToken: reponse['tempToken'] as String);
   }
 
+  /// Échange un ID token Google contre la même session que `verifyOtp`.
+  Future<MobileAuthSession> connexionGoogle(String idToken) async {
+    final reponse = await _client.post(
+      '/mobile-auth/google',
+      body: {'idToken': idToken},
+    ) as Map<String, dynamic>;
+    return _parserSession(reponse);
+  }
+
   Future<MobileAuthSession> verifyOtp({required String tempToken, required String code}) async {
     final reponse = await _client.post(
       '/mobile-auth/verify-otp',

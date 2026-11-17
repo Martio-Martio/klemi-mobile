@@ -1,11 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
 import '../../Configuration/longueurs_telephone.dart';
 import '../../Models/pays.dart';
+import '../../Pages/app_shell.dart';
+import '../../Providers/app_state.dart';
 import '../../Services/api_exception.dart';
+import '../../Services/connexion_google.dart';
 import '../../Services/mobile_auth_api.dart';
+import '../../Services/push_service.dart';
+import '../../Services/social_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import '../../Widgets/selecteur_indicatif.dart';
 import 'code_page.dart';
@@ -15,7 +23,8 @@ import 'langue_page.dart';
 /// 1.2 · Connexion — numéro + code WhatsApp (défaut) ou e‑mail + mot de passe.
 class ConnexionPage extends StatefulWidget {
   final MobileAuthApi? api; // injectable pour les tests
-  const ConnexionPage({super.key, this.api});
+  final ConnexionGoogle? connexionGoogle;
+  const ConnexionPage({super.key, this.api, this.connexionGoogle});
 
   @override
   State<ConnexionPage> createState() => _ConnexionPageState();
@@ -28,6 +37,8 @@ class _ConnexionPageState extends State<ConnexionPage> {
   bool _enCours = false;
 
   late final MobileAuthApi _api = widget.api ?? MobileAuthApi();
+  late final ConnexionGoogle _google =
+      widget.connexionGoogle ?? ConnexionGoogle(api: _api);
 
   @override
   void dispose() {
@@ -48,9 +59,11 @@ class _ConnexionPageState extends State<ConnexionPage> {
       final demarrage = await _api.login(numero);
       if (!mounted) return;
       EasyLoading.dismiss();
-      Navigator.of(context).push(routeGlissante(
-        CodePage(numero: numero, tempToken: demarrage.tempToken),
-      ));
+      Navigator.of(context).push(
+        routeGlissante(
+          CodePage(numero: numero, tempToken: demarrage.tempToken),
+        ),
+      );
     } on ApiException catch (e) {
       if (!mounted) return;
       EasyLoading.dismiss();
@@ -61,6 +74,61 @@ class _ConnexionPageState extends State<ConnexionPage> {
       }
     } finally {
       if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  Future<void> _connecterAvecGoogle() async {
+    if (_enCours) return;
+    final etat = context.read<AppState>();
+    setState(() => _enCours = true);
+    EasyLoading.show(status: 'Connexion Google…');
+    try {
+      final session = await _google.connecter();
+      if (!mounted) return;
+      if (session == null) {
+        EasyLoading.dismiss();
+        return;
+      }
+      await etat.definirSession(
+        accessToken: session.accessToken,
+        refreshToken: session.refreshToken,
+      );
+      unawaited(_enregistrerPushToken());
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      Navigator.of(
+        context,
+      ).pushAndRemoveUntil(routeGlissante(const AppShell()), (_) => false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _afficherErreur(
+        e.message,
+        duree: e.code == 'GOOGLE_NON_CONFIGURE'
+            ? const Duration(seconds: 8)
+            : null,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      EasyLoading.dismiss();
+      _afficherErreur('La connexion Google a échoué.');
+    } finally {
+      if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  Future<void> _enregistrerPushToken() async {
+    final push = PushService.instance;
+    try {
+      await push.demanderPermission();
+      final token = await push.obtenirToken();
+      if (token == null || token.isEmpty) return;
+      await SocialApi().registerPushToken(
+        token: token,
+        platform: push.plateforme,
+      );
+    } catch (_) {
+      // Pas critique — même contrat que code_page après l'OTP.
     }
   }
 
@@ -86,17 +154,24 @@ class _ConnexionPageState extends State<ConnexionPage> {
         duration: const Duration(seconds: 6),
         action: SnackBarAction(
           label: 'S\'inscrire',
-          onPressed: () => Navigator.of(context).pushReplacement(
-            routeGlissante(const InscriptionPage()),
-          ),
+          onPressed: () => Navigator.of(
+            context,
+          ).pushReplacement(routeGlissante(const InscriptionPage())),
         ),
       ),
     );
   }
 
-  void _afficherErreur(String message) {
+  void _afficherErreur(String message, {Duration? duree}) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(fontFamilyFallback: AppTheme.famillesSecours),
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: duree ?? const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -114,11 +189,18 @@ class _ConnexionPageState extends State<ConnexionPage> {
                 children: const [LogoKlemi(), ChipLangue()],
               ),
               const SizedBox(height: 28),
-              Text('Content de te revoir', style: Theme.of(context).textTheme.headlineMedium),
+              Text(
+                'Content de te revoir',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
               const SizedBox(height: 8),
               const Text(
                 'Connecte‑toi avec ton numéro. Tu recevras un code sur WhatsApp, pas besoin de mot de passe.',
-                style: TextStyle(fontSize: 15, height: 1.5, color: AppTheme.texteSecondaire),
+                style: TextStyle(
+                  fontSize: 15,
+                  height: 1.5,
+                  color: AppTheme.texteSecondaire,
+                ),
               ),
               const SizedBox(height: 22),
               KlemiSegments(
@@ -130,11 +212,17 @@ class _ConnexionPageState extends State<ConnexionPage> {
               if (_mode == 0) ...[
                 KlemiChamp(
                   etiquette: 'Numéro de téléphone',
-                  indice: 'Max ${longueurMaxIndicatif(_pays.callingCodes)} chiffres',
+                  indice:
+                      'Max ${longueurMaxIndicatif(_pays.callingCodes)} chiffres',
                   type: TextInputType.phone,
                   controleur: _telephone,
-                  formateurs: formateursNumero(longueurMaxIndicatif(_pays.callingCodes)),
-                  prefixe: SelecteurIndicatif(pays: _pays, onChanged: _choisirPays),
+                  formateurs: formateursNumero(
+                    longueurMaxIndicatif(_pays.callingCodes),
+                  ),
+                  prefixe: SelecteurIndicatif(
+                    pays: _pays,
+                    onChanged: _choisirPays,
+                  ),
                 ),
                 const SizedBox(height: 14),
                 KlemiBouton(
@@ -148,7 +236,10 @@ class _ConnexionPageState extends State<ConnexionPage> {
                   onPressed: () {},
                   child: const Text(
                     'Recevoir le code par SMS à la place',
-                    style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.bleuFonce),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.bleuFonce,
+                    ),
                   ),
                 ),
               ] else ...[
@@ -158,21 +249,30 @@ class _ConnexionPageState extends State<ConnexionPage> {
                   type: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 14),
-                const KlemiChamp(etiquette: 'Mot de passe', indice: '••••••••', secret: true),
+                const KlemiChamp(
+                  etiquette: 'Mot de passe',
+                  indice: '••••••••',
+                  secret: true,
+                ),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {},
-                    child: const Text('Mot de passe oublié ?',
-                        style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.bleuFonce)),
+                    child: const Text(
+                      'Mot de passe oublié ?',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.bleuFonce,
+                      ),
+                    ),
                   ),
                 ),
                 KlemiBouton(
                   libelle: 'Se connecter',
                   icone: Icons.arrow_forward,
-                  onPressed: () => Navigator.of(context).pushReplacement(
-                    routeGlissante(const LanguePage()),
-                  ),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pushReplacement(routeGlissante(const LanguePage())),
                 ),
               ],
               const SizedBox(height: 22),
@@ -181,8 +281,13 @@ class _ConnexionPageState extends State<ConnexionPage> {
                   Expanded(child: Divider()),
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('ou continuer avec',
-                        style: TextStyle(fontSize: 12, color: AppTheme.texteDiscret)),
+                    child: Text(
+                      'ou continuer avec',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.texteDiscret,
+                      ),
+                    ),
                   ),
                   Expanded(child: Divider()),
                 ],
@@ -191,21 +296,28 @@ class _ConnexionPageState extends State<ConnexionPage> {
               KlemiBoutonSecondaire(
                 libelle: 'Google',
                 icone: Icons.language,
-                onPressed: () {},
+                onPressed: _enCours ? null : _connecterAvecGoogle,
               ),
               const SizedBox(height: 28),
               Center(
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    const Text('Nouveau sur Klemi ? ',
-                        style: TextStyle(color: AppTheme.texteSecondaire)),
+                    const Text(
+                      'Nouveau sur Klemi ? ',
+                      style: TextStyle(color: AppTheme.texteSecondaire),
+                    ),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pushReplacement(
                         routeGlissante(const InscriptionPage()),
                       ),
-                      child: const Text('Créer un compte',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: AppTheme.bleuFonce)),
+                      child: const Text(
+                        'Créer un compte',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.bleuFonce,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -214,7 +326,11 @@ class _ConnexionPageState extends State<ConnexionPage> {
               const Text(
                 "En continuant, tu acceptes les conditions d'utilisation et la politique de confidentialité.",
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, height: 1.5, color: AppTheme.texteDiscret),
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.5,
+                  color: AppTheme.texteDiscret,
+                ),
               ),
             ],
           ),
