@@ -7,6 +7,7 @@ import '../Services/api_exception.dart';
 import '../Services/auth_storage.dart';
 import '../Services/mobile_auth_api.dart';
 import '../Services/profile_api.dart';
+import '../Services/push_router.dart';
 import '../Services/push_service.dart';
 import '../Services/social_api.dart';
 
@@ -63,6 +64,18 @@ class AppState extends ChangeNotifier {
   /// Notifications non lues — mis à jour par le centre de notifs ou via SSE
   /// quand le badge décrémente temps réel (plan Phase 5).
   int notificationsNonLues = 0;
+
+  /// Intent de deep-link push en attente — déposé par `MyApp._surMessageTappe`
+  /// (après `popUntil(isFirst)`) et consommé par `AppShell` qui exécute la
+  /// navigation (bascule onglet feed, assure le contenu via le repo, ouvre la
+  /// sheet commentaires si demandé). `AppShell` remet à null une fois traité.
+  final ValueNotifier<DecisionPush?> intentPush = ValueNotifier(null);
+
+  @override
+  void dispose() {
+    intentPush.dispose();
+    super.dispose();
+  }
 
   // Niveau d'études et matières (ajustables : collège, lycée, université…)
   static const _cleNiveau = 'niveau';

@@ -121,9 +121,11 @@ class _MyAppState extends State<MyApp> {
   }
 
   /// Un push a été tapé — route vers l'écran pertinent selon le type.
-  /// Pour l'instant, les destinations `feedContenu` et `commentaires`
-  /// tombent sur `NotificationsPage` tant que les deep-links vers un item
-  /// précis du feed ne sont pas câblés (Phase 7.5).
+  /// - `forfaits` / `notifications` : push simple (reste au-dessus de l'écran courant).
+  /// - `feedContenu` / `commentaires` avec `contentId` : retour à l'`AppShell` +
+  ///   dépôt de l'intent dans `AppState.intentPush` → l'`AppShell` écoute,
+  ///   bascule sur l'onglet feed, assure le contenu via le repo, et ouvre la
+  ///   sheet commentaires si c'était la destination.
   void _surMessageTappe(Map<String, dynamic> payload) {
     final nav = _navigatorKey.currentState;
     if (nav == null) return;
@@ -132,11 +134,20 @@ class _MyAppState extends State<MyApp> {
       case DestinationPush.forfaits:
         nav.push(MaterialPageRoute(builder: (_) => const ForfaitsPage()));
       case DestinationPush.notifications:
+        nav.push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
       case DestinationPush.feedContenu:
       case DestinationPush.commentaires:
-        // TODO Phase 7.5 : pour feedContenu + commentaires, ouvrir
-        // directement l'item du feed via fetchOne(contentId).
-        nav.push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
+        if (decision.contentId == null) {
+          // Pas d'ID utilisable → repli sur la page notifications pour que
+          // l'utilisateur voie quand même le message.
+          nav.push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
+          return;
+        }
+        // Retour à la racine (AppShell) puis signal via AppState — l'écoute
+        // dans `AppShell.initState` fait le reste. Si l'utilisateur n'est pas
+        // connecté, l'intent reste en attente jusqu'à l'ouverture d'AppShell.
+        nav.popUntil((r) => r.isFirst);
+        widget.etat.intentPush.value = decision;
     }
   }
 

@@ -102,6 +102,85 @@ void main() {
     expect(notifie, isTrue);
   });
 
+  test('assurerContenu : skip si déjà en cache', () async {
+    final api = apiAvecPages([
+      {
+        'items': [_quizJson('a')],
+        'nextCursor': null,
+      },
+    ]);
+    final repo = FeedRepository(api: api, utiliserMock: false);
+    await repo.amorcer(TabFeed.pourToi);
+    final res = await repo.assurerContenu('a');
+    expect(res, isNotNull);
+    expect(res!.id, 'a');
+    // Le mock a été pré-rempli avec 1 page uniquement : si assurerContenu
+    // avait fetchOne, pages[1] n'existerait pas et on aurait crashé.
+  });
+
+  test('assurerContenu : fetchOne et prepend quand absent', () async {
+    var i = 0;
+    final mock = MockClient((r) async {
+      i++;
+      if (i == 1) {
+        // amorce
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'items': [_quizJson('x')], 'nextCursor': null})),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      // fetchOne
+      expect(r.url.path, '/api/mobile/feed/nouveau');
+      return http.Response.bytes(
+        utf8.encode(jsonEncode(_quizJson('nouveau'))),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    final api = MobileFeedApi(ApiClient(
+      baseUrl: 'https://exemple.test/api',
+      resoudreLangue: () => 'fr',
+      resoudreToken: () async => null,
+      client: mock,
+    ));
+    final repo = FeedRepository(api: api, utiliserMock: false);
+    await repo.amorcer(TabFeed.pourToi);
+    final res = await repo.assurerContenu('nouveau');
+    expect(res, isNotNull);
+    expect(res!.id, 'nouveau');
+    // L'item est inséré en tête du cache.
+    expect(repo.etat(TabFeed.pourToi).items.first.id, 'nouveau');
+    expect(repo.etat(TabFeed.pourToi).items.length, 2);
+  });
+
+  test('assurerContenu : retourne null si fetchOne échoue (404/500)', () async {
+    var i = 0;
+    final mock = MockClient((r) async {
+      i++;
+      if (i == 1) {
+        return http.Response.bytes(
+          utf8.encode(jsonEncode({'items': [_quizJson('x')], 'nextCursor': null})),
+          200,
+          headers: {'content-type': 'application/json; charset=utf-8'},
+        );
+      }
+      return http.Response(jsonEncode({'statusCode': 404, 'message': 'absent'}), 404);
+    });
+    final api = MobileFeedApi(ApiClient(
+      baseUrl: 'https://exemple.test/api',
+      resoudreLangue: () => 'fr',
+      resoudreToken: () async => null,
+      client: mock,
+    ));
+    final repo = FeedRepository(api: api, utiliserMock: false);
+    await repo.amorcer(TabFeed.pourToi);
+    final res = await repo.assurerContenu('disparu');
+    expect(res, isNull);
+    // Le cache n'a pas été pollué.
+    expect(repo.etat(TabFeed.pourToi).items.length, 1);
+  });
+
   test('rafraichir recharge depuis zéro', () async {
     final api = apiAvecPages([
       {'items': [_quizJson('a')], 'nextCursor': null},

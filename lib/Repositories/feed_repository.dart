@@ -102,6 +102,32 @@ class FeedRepository extends ChangeNotifier {
     );
   }
 
+  /// Garantit qu'un contenu précis est présent en tête du cache `pourToi`.
+  /// Utilisé par le deep-link push : au tap sur une notif, on doit pouvoir
+  /// afficher l'item même s'il n'était pas déjà chargé par scroll.
+  ///
+  /// Idempotent : si l'item est déjà dans le cache, aucun appel réseau.
+  /// Retourne l'item résolu, ou `null` en cas d'échec (erreur réseau,
+  /// contenu supprimé…).
+  Future<FeedItem?> assurerContenu(String id) async {
+    for (final etat in _etats.values) {
+      for (final item in etat.items) {
+        if (item.id == id) return item;
+      }
+    }
+    try {
+      final item = await _api.fetchOne(id);
+      final etatPourToi = etat(TabFeed.pourToi);
+      _etats[TabFeed.pourToi] = etatPourToi.copier(
+        items: [item, ...etatPourToi.items],
+      );
+      notifyListeners();
+      return item;
+    } on ApiException {
+      return null;
+    }
+  }
+
   /// Invalide le cache pour tous les onglets — à appeler quand la langue
   /// de lecture ou d'écoute change.
   void invaliderTout() {
