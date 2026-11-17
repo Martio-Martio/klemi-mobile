@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../Configuration/app_theme.dart';
+import '../../Services/billing_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import 'paiement_page.dart';
 
@@ -73,7 +74,8 @@ String formatFcfa(int n) {
 
 /// 3.3 · Choix du forfait avec avantages.
 class ForfaitsPage extends StatefulWidget {
-  const ForfaitsPage({super.key});
+  final BillingApi? api; // injectable pour les tests
+  const ForfaitsPage({super.key, this.api});
 
   @override
   State<ForfaitsPage> createState() => _ForfaitsPageState();
@@ -82,6 +84,44 @@ class ForfaitsPage extends StatefulWidget {
 class _ForfaitsPageState extends State<ForfaitsPage> {
   bool _annuel = false;
   String _choix = 'STUDENT';
+  List<Forfait> _forfaits = forfaits; // défaut = mock, remplacé par l'API si dispo
+
+  late final BillingApi _api = widget.api ?? BillingApi();
+
+  @override
+  void initState() {
+    super.initState();
+    _charger();
+  }
+
+  Future<void> _charger() async {
+    try {
+      final dispo = await _api.fetchPlans();
+      if (!mounted || dispo.isEmpty) return;
+      setState(() {
+        _forfaits = dispo
+            .map((d) => Forfait(
+                  id: d.id,
+                  nom: d.nom,
+                  prixMensuel: d.prixMensuel,
+                  prixAnnuel: d.prixAnnuel,
+                  accroche: d.accroche,
+                  avantages: d.avantages,
+                  recommande: d.recommande,
+                ))
+            .toList();
+        // Garder _choix si toujours présent, sinon fallback au plus abordable payant.
+        if (!_forfaits.any((f) => f.id == _choix)) {
+          _choix = _forfaits.firstWhere(
+            (f) => f.prixMensuel > 0,
+            orElse: () => _forfaits.first,
+          ).id;
+        }
+      });
+    } catch (_) {
+      // Mode offline : on garde la liste codée en dur.
+    }
+  }
 
   /// Le forfait Pro n'affiche pas de tarif : on oriente vers le support.
   Future<void> _contacterServiceClient(BuildContext context) async {
@@ -100,7 +140,7 @@ class _ForfaitsPageState extends State<ForfaitsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final choisi = forfaits.firstWhere((f) => f.id == _choix);
+    final choisi = _forfaits.firstWhere((f) => f.id == _choix, orElse: () => _forfaits.first);
     final montant = _annuel ? choisi.prixAnnuel : choisi.prixMensuel;
 
     return Scaffold(
@@ -147,7 +187,7 @@ class _ForfaitsPageState extends State<ForfaitsPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  for (final f in forfaits) ...[
+                  for (final f in _forfaits) ...[
                     _CarteForfait(
                       forfait: f,
                       annuel: _annuel,

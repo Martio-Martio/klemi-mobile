@@ -16,7 +16,15 @@ flutter test
 ## Environnements API
 
 L'URL de base de `klemi-api` est injectée au build via `--dart-define=API_BASE_URL=…`.
-Default : dev Railway.
+Default : dev Railway (`https://teach-me-api-development.up.railway.app/api`).
+
+| Environnement | URL | Usage |
+|---------------|-----|-------|
+| Prod | `https://api.klemi.ci/api` | Builds TestFlight / Play Store |
+| Dev (Railway) | `https://teach-me-api-development.up.railway.app/api` | Défaut si `--dart-define` absent |
+| Local | `http://localhost:7501/api` | Backend lancé via `npm run start:dev` côté `klemi-api` |
+
+> ⚠️ L'ancienne URL `https://api2-dev.klemi.ci/api` est **dépréciée** — ne plus l'utiliser.
 
 ```bash
 # Dev (Railway, défaut si --dart-define absent)

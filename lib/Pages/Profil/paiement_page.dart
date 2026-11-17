@@ -1,46 +1,142 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:provider/provider.dart';
 
 import '../../Configuration/app_theme.dart';
 import '../../Providers/app_state.dart';
+import '../../Repositories/profile_repository.dart';
+import '../../Services/api_exception.dart';
+import '../../Services/billing_api.dart';
 import '../../Widgets/klemi_widgets.dart';
 import 'forfaits_page.dart';
 
+/// Affichage des moyens de paiement — Flex Transfer couvre Orange / MTN /
+/// Moov / Wave (audit 2026-11-17). Pas de carte bancaire pour l'instant :
+/// retirée par rapport à l'ancienne UI mock.
 class _MoyenPaiement {
-  final String id;
+  final MoyenPaiement id;
   final String nom;
   final String pays;
   final String initiales;
   final Color couleur;
   final Color couleurTexte;
-  final bool numero; // demande un numéro mobile money
 
   const _MoyenPaiement(this.id, this.nom, this.pays, this.initiales, this.couleur,
-      {this.couleurTexte = AppTheme.blanc, this.numero = true});
+      {this.couleurTexte = AppTheme.blanc});
 }
 
 const _moyens = [
-  _MoyenPaiement('orange', 'Orange Money', "Mali · Côte d'Ivoire · Sénégal", 'OM', Color(0xFFFF7900)),
-  _MoyenPaiement('mtn', 'MTN MoMo', "Côte d'Ivoire · Guinée · Bénin", 'MTN', Color(0xFFFFCC00),
+  _MoyenPaiement(MoyenPaiement.orange, 'Orange Money', "Mali · Côte d'Ivoire · Sénégal", 'OM', Color(0xFFFF7900)),
+  _MoyenPaiement(MoyenPaiement.mtn, 'MTN MoMo', "Côte d'Ivoire · Guinée · Bénin", 'MTN', Color(0xFFFFCC00),
       couleurTexte: AppTheme.navy),
-  _MoyenPaiement('moov', 'Moov Money', "Mali · Côte d'Ivoire · Togo", 'MV', Color(0xFF0067B3)),
-  _MoyenPaiement('wave', 'Wave', "Sénégal · Mali · Côte d'Ivoire", 'W', Color(0xFF1DC8FE),
+  _MoyenPaiement(MoyenPaiement.moov, 'Moov Money', "Mali · Côte d'Ivoire · Togo", 'MV', Color(0xFF0067B3)),
+  _MoyenPaiement(MoyenPaiement.wave, 'Wave', "Sénégal · Mali · Côte d'Ivoire", 'W', Color(0xFF1DC8FE),
       couleurTexte: AppTheme.navy),
-  _MoyenPaiement('card', 'Carte bancaire', 'Visa · Mastercard', 'CB', AppTheme.navy, numero: false),
 ];
 
-/// 3.4 · Paiement du forfait par mobile money ou carte.
+/// 3.4 · Paiement du forfait par mobile money (Flex Transfer).
 class PaiementPage extends StatefulWidget {
   final Forfait forfait;
   final bool annuel;
-  const PaiementPage({super.key, required this.forfait, required this.annuel});
+  final BillingApi? api; // injectable pour les tests
+  const PaiementPage({super.key, required this.forfait, required this.annuel, this.api});
 
   @override
   State<PaiementPage> createState() => _PaiementPageState();
 }
 
 class _PaiementPageState extends State<PaiementPage> {
-  String _moyen = 'orange';
+  MoyenPaiement _moyen = MoyenPaiement.orange;
+  final _numero = TextEditingController();
+  bool _enCours = false;
+
+  late final BillingApi _api = widget.api ?? BillingApi();
+
+  @override
+  void dispose() {
+    _numero.dispose();
+    super.dispose();
+  }
+
+  Future<void> _payer(BuildContext context, Forfait f) async {
+    if (_enCours) return;
+    final n = _numero.text.trim();
+    if (n.isEmpty) {
+      _snack('Entre le numéro du compte mobile money.');
+      return;
+    }
+    setState(() => _enCours = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final etat = context.read<AppState>();
+    EasyLoading.show(status: 'Initialisation du paiement…');
+
+    try {
+      final checkout = await _api.checkout(
+        planId: f.id,
+        duree: widget.annuel ? DureeAbo.annual : DureeAbo.monthly,
+        moyen: _moyen,
+        numero: n,
+      );
+      EasyLoading.dismiss();
+      if (!mounted) return;
+
+      final statut = await _attendrePaiement(checkout.invoiceId);
+      if (!mounted) return;
+
+      if (statut.paye) {
+        // Rafraîchir profil (nouveau forfait + quota) côté serveur.
+        await ProfileRepository.instance.charger(etat);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Forfait ${f.nom} activé. Reçu envoyé par WhatsApp.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        navigator.popUntil((r) => r.isFirst);
+      } else if (statut.echoue) {
+        _snack(statut.messageErreur ?? 'Paiement refusé. Réessaie ou change de moyen.');
+      } else {
+        // PENDING au-delà du timeout : on informe sans marquer échoué.
+        _snack('Le paiement est encore en cours. Tu recevras une confirmation WhatsApp.');
+      }
+    } on ApiException catch (e) {
+      EasyLoading.dismiss();
+      _snack(e.message);
+    } catch (_) {
+      EasyLoading.dismiss();
+      _snack('Impossible de joindre le serveur. Vérifie ta connexion.');
+    } finally {
+      if (mounted) setState(() => _enCours = false);
+    }
+  }
+
+  /// Poll /mobile/subscription/status/:invoiceId toutes les 3 s, max 2 min.
+  Future<StatutPaiement> _attendrePaiement(String invoiceId) async {
+    const intervalle = Duration(seconds: 3);
+    const timeoutTotal = Duration(minutes: 2);
+    final deadline = DateTime.now().add(timeoutTotal);
+    StatutPaiement dernier = const StatutPaiement(statut: 'PENDING');
+    while (DateTime.now().isBefore(deadline)) {
+      await Future.delayed(intervalle);
+      try {
+        dernier = await _api.fetchStatus(invoiceId);
+        if (!dernier.enAttente) return dernier;
+      } on ApiException {
+        // on continue à poller — erreur réseau transitoire.
+      }
+    }
+    return dernier; // probablement PENDING → UI affiche message dédié
+  }
+
+  void _snack(String m) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(m), behavior: SnackBarBehavior.floating),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,18 +251,17 @@ class _PaiementPageState extends State<PaiementPage> {
                     ),
                     const SizedBox(height: 8),
                   ],
-                  if (moyen.numero) ...[
-                    const SizedBox(height: 8),
-                    KlemiChamp(
-                      etiquette: 'Numéro ${moyen.nom}',
-                      indice: '70 12 34 56',
-                      type: TextInputType.phone,
-                      prefixe: const IndicatifPays(),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text('Tu recevras une demande de confirmation sur ton téléphone.',
-                        style: TextStyle(fontSize: 12, color: AppTheme.texteDiscret)),
-                  ],
+                  const SizedBox(height: 8),
+                  KlemiChamp(
+                    etiquette: 'Numéro ${moyen.nom}',
+                    indice: '70 12 34 56',
+                    type: TextInputType.phone,
+                    controleur: _numero,
+                    prefixe: const IndicatifPays(),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('Tu recevras une demande de confirmation sur ton téléphone.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.texteDiscret)),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -216,19 +311,10 @@ class _PaiementPageState extends State<PaiementPage> {
               child: Column(
                 children: [
                   KlemiBouton(
-                    libelle: 'Payer ${formatFcfa(montant)}',
+                    libelle: _enCours ? 'Paiement en cours…' : 'Payer ${formatFcfa(montant)}',
                     icone: Icons.lock_outline,
                     iconeADroite: false,
-                    onPressed: () {
-                      context.read<AppState>().changerForfait(f.nom);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Forfait ${f.nom} activé. Reçu envoyé par WhatsApp.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                      Navigator.of(context).popUntil((r) => r.isFirst);
-                    },
+                    onPressed: _enCours ? null : () => _payer(context, f),
                   ),
                   const SizedBox(height: 8),
                   const Text(
