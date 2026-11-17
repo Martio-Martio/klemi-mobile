@@ -7,9 +7,12 @@ import 'package:provider/provider.dart';
 
 import 'Configuration/api_client.dart';
 import 'Configuration/app_theme.dart';
+import 'Pages/Profil/forfaits_page.dart';
+import 'Pages/Social/notifications_page.dart';
 import 'Providers/app_state.dart';
 import 'Services/fcm_push_service.dart';
 import 'Services/offline_queue.dart';
+import 'Services/push_router.dart';
 import 'Services/push_service.dart';
 import 'Services/sentry_service.dart';
 import 'Widgets/custom_animation.dart';
@@ -79,21 +82,32 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
-  StreamSubscription<Map<String, dynamic>>? _abonnementPush;
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<Map<String, dynamic>>? _abonnementForeground;
+  StreamSubscription<Map<String, dynamic>>? _abonnementOuverts;
 
   @override
   void initState() {
     super.initState();
-    _abonnementPush = PushService.instance.messagesForeground.listen(_surMessagePush);
+    final push = PushService.instance;
+    _abonnementForeground = push.messagesForeground.listen(_surMessageForeground);
+    _abonnementOuverts = push.messagesOuverts.listen(_surMessageTappe);
+    // Cold start : si l'app a été lancée depuis un push, le router doit
+    // attendre que l'arbre soit monté avant de pouvoir pousser une route.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final initial = await push.messageInitial();
+      if (initial != null) _surMessageTappe(initial);
+    });
   }
 
   @override
   void dispose() {
-    _abonnementPush?.cancel();
+    _abonnementForeground?.cancel();
+    _abonnementOuverts?.cancel();
     super.dispose();
   }
 
-  void _surMessagePush(Map<String, dynamic> payload) {
+  void _surMessageForeground(Map<String, dynamic> payload) {
     final titre = payload['titre'] as String?;
     final detail = payload['detail'] as String?;
     if (titre == null && detail == null) return;
@@ -104,6 +118,26 @@ class _MyAppState extends State<MyApp> {
         duration: const Duration(seconds: 4),
       ),
     );
+  }
+
+  /// Un push a été tapé — route vers l'écran pertinent selon le type.
+  /// Pour l'instant, les destinations `feedContenu` et `commentaires`
+  /// tombent sur `NotificationsPage` tant que les deep-links vers un item
+  /// précis du feed ne sont pas câblés (Phase 7.5).
+  void _surMessageTappe(Map<String, dynamic> payload) {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
+    final decision = routerPourPush(payload);
+    switch (decision.destination) {
+      case DestinationPush.forfaits:
+        nav.push(MaterialPageRoute(builder: (_) => const ForfaitsPage()));
+      case DestinationPush.notifications:
+      case DestinationPush.feedContenu:
+      case DestinationPush.commentaires:
+        // TODO Phase 7.5 : pour feedContenu + commentaires, ouvrir
+        // directement l'item du feed via fetchOne(contentId).
+        nav.push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
+    }
   }
 
   @override
@@ -123,6 +157,7 @@ class _MyAppState extends State<MyApp> {
         theme: AppTheme.theme(),
         debugShowCheckedModeBanner: false,
         scaffoldMessengerKey: _messengerKey,
+        navigatorKey: _navigatorKey,
         home: const SplashScreen(),
         builder: EasyLoading.init(),
       ),

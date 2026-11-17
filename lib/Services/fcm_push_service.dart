@@ -18,7 +18,11 @@ class FcmPushService implements PushService {
   final FirebaseMessaging _messaging;
   final StreamController<Map<String, dynamic>> _foreground =
       StreamController<Map<String, dynamic>>.broadcast();
-  StreamSubscription<RemoteMessage>? _abonnement;
+  final StreamController<Map<String, dynamic>> _ouverts =
+      StreamController<Map<String, dynamic>>.broadcast();
+  StreamSubscription<RemoteMessage>? _abonnementForeground;
+  StreamSubscription<RemoteMessage>? _abonnementOuverts;
+  bool _messageInitialConsomme = false;
 
   FcmPushService._(this._messaging);
 
@@ -31,8 +35,11 @@ class FcmPushService implements PushService {
     }
     final messaging = FirebaseMessaging.instance;
     final instance = FcmPushService._(messaging);
-    instance._abonnement = FirebaseMessaging.onMessage.listen((msg) {
+    instance._abonnementForeground = FirebaseMessaging.onMessage.listen((msg) {
       instance._foreground.add(_versPayload(msg));
+    });
+    instance._abonnementOuverts = FirebaseMessaging.onMessageOpenedApp.listen((msg) {
+      instance._ouverts.add(_versPayload(msg));
     });
     return instance;
   }
@@ -67,11 +74,26 @@ class FcmPushService implements PushService {
   @override
   Stream<Map<String, dynamic>> get messagesForeground => _foreground.stream;
 
-  /// Libère le stream et l'abonnement — utilisé au logout.
+  @override
+  Stream<Map<String, dynamic>> get messagesOuverts => _ouverts.stream;
+
+  @override
+  Future<Map<String, dynamic>?> messageInitial() async {
+    if (_messageInitialConsomme) return null;
+    _messageInitialConsomme = true;
+    final msg = await _messaging.getInitialMessage();
+    if (msg == null) return null;
+    return _versPayload(msg);
+  }
+
+  /// Libère les streams et les abonnements — utilisé en teardown test.
   Future<void> arreter() async {
-    await _abonnement?.cancel();
-    _abonnement = null;
+    await _abonnementForeground?.cancel();
+    await _abonnementOuverts?.cancel();
+    _abonnementForeground = null;
+    _abonnementOuverts = null;
     await _foreground.close();
+    await _ouverts.close();
   }
 }
 

@@ -22,8 +22,17 @@ abstract class PushService {
   /// Plateforme à envoyer avec le token (`ios` | `android`).
   String get plateforme;
 
-  /// Stream des payloads reçus en foreground.
+  /// Stream des payloads reçus en foreground (notification affichée par
+  /// l'OS mais app visible). À brancher sur un snackbar.
   Stream<Map<String, dynamic>> get messagesForeground;
+
+  /// Stream des payloads **tapés** par l'utilisateur alors que l'app était
+  /// en arrière-plan ou en foreground. À router vers l'écran pertinent.
+  Stream<Map<String, dynamic>> get messagesOuverts;
+
+  /// Payload qui a lancé l'app depuis un push (app précédemment tuée).
+  /// Retourné une seule fois ; les appels suivants donnent `null`.
+  Future<Map<String, dynamic>?> messageInitial();
 
   /// Factory par défaut — renvoie un stub inerte.
   factory PushService.stub() = _StubPushService;
@@ -56,4 +65,10 @@ class _StubPushService implements PushService {
 
   @override
   Stream<Map<String, dynamic>> get messagesForeground => const Stream.empty();
+
+  @override
+  Stream<Map<String, dynamic>> get messagesOuverts => const Stream.empty();
+
+  @override
+  Future<Map<String, dynamic>?> messageInitial() async => null;
 }
